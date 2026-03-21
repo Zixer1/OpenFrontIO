@@ -908,6 +908,18 @@ export class DefaultConfig implements Config {
     return 20;
   }
 
+  warshipPortHealingRadius(): number {
+    return 10;
+  }
+
+  warshipPortHealingBonus(): number {
+    return 5;
+  }
+
+  warshipRetreatHealthThreshold(): number {
+    return 750;
+  }
+
   defensePostShellAttackRate(): number {
     return 100;
   }
