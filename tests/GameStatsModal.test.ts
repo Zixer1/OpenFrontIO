@@ -144,6 +144,28 @@ describe("GameStatsModal buildOverviewRows", () => {
     expect(rows[1].goldTotal).toBe(500);
   });
 
+  test("gold falls back to history max when no stats and player is dead", () => {
+    const p1 = fakePlayer({
+      id: "p1",
+      clientID: null,
+      name: "Rome",
+      type: PlayerType.Nation,
+      alive: false,
+      gold: 0n,
+      troops: 0,
+      tiles: 0,
+    });
+    const game = fakeGame({ players: [p1], ticks: 600, numLand: 100 });
+    const history: GameHistory = {
+      labels: ["0:00", "0:06", "0:12"],
+      territory: {},
+      gold: { p1: [100, 500, 300] },
+      troops: {},
+    };
+    const rows = buildRows(game, null, history);
+    expect(rows[0].goldTotal).toBe(500);
+  });
+
   test("uses history peak for territory percentage", () => {
     const p1 = fakePlayer({
       id: "p1",

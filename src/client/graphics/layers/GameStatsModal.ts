@@ -25,6 +25,12 @@ const TABS: { id: TabId; key: string }[] = [
 
 const GOLD_COLORS = ["#f59e0b", "#ef4444", "#10b981", "#8b5cf6", "#06b6d4"];
 
+function arrMax(arr: number[], fallback = 0): number {
+  let m = fallback;
+  for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+  return m;
+}
+
 const UNIT_COLORS: Record<string, string> = {
   city: "#60a5fa",
   defp: "#34d399",
@@ -181,7 +187,13 @@ export class GameStatsModal extends LitElement {
         (s, v) => s + Number(v),
         0,
       );
-      const goldTotal = statsGold > 0 ? statsGold : Number(p.gold());
+      const histGold = this.history?.gold[pid] ?? [];
+      const goldTotal =
+        statsGold > 0
+          ? statsGold
+          : histGold.length > 0
+            ? arrMax(histGold)
+            : Number(p.gold());
 
       const statsTroops = Number(stats?.attacks?.[0] ?? 0n);
       const histTroops = this.history?.troops[pid] ?? [];
@@ -189,7 +201,7 @@ export class GameStatsModal extends LitElement {
         statsTroops > 0
           ? statsTroops
           : histTroops.length > 0
-            ? Math.max(...histTroops)
+            ? arrMax(histTroops)
             : p.troops();
 
       const structuresBuilt = Number(
@@ -211,7 +223,7 @@ export class GameStatsModal extends LitElement {
       const terrHist = this.history?.territory[pid] ?? [];
       const peakTiles =
         terrHist.length > 0
-          ? Math.max(...terrHist, p.numTilesOwned())
+          ? arrMax(terrHist, p.numTilesOwned())
           : p.numTilesOwned();
       const peakTerritoryPct = peakTiles / numLand;
 
@@ -859,7 +871,8 @@ export class GameStatsModal extends LitElement {
         ${this.collecting()}
       `;
 
-    const maxV = Math.max(...active.flatMap((s) => s.values), 1);
+    let maxV = 1;
+    for (const s of active) maxV = arrMax(s.values, maxV);
     const W = 540,
       H = 180,
       pL = 46,
