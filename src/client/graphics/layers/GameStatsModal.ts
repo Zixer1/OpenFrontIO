@@ -103,6 +103,7 @@ export class GameStatsModal extends LitElement {
 
   @property({ type: Object }) game: GameView | null = null;
   @property({ type: Object }) allPlayersStats: AllPlayersStats | null = null;
+  @property({ type: Object }) allAIStats: AllPlayersStats | null = null;
   @property({ type: Object }) history: GameHistory | null = null;
   @property({ type: String }) winnerID: string | null = null;
 
@@ -124,7 +125,8 @@ export class GameStatsModal extends LitElement {
 
   private statsFor(p: PlayerView) {
     const cid = p.clientID();
-    return cid !== null ? this.allPlayersStats?.[cid] ?? undefined : undefined;
+    if (cid !== null) return this.allPlayersStats?.[cid] ?? undefined;
+    return this.allAIStats?.[p.id()] ?? undefined;
   }
 
   render() {

@@ -875,7 +875,7 @@ export interface Game extends GameMap {
   drainPackedTileUpdates(): Uint32Array;
   recordMotionPlan(record: MotionPlanRecord): void;
   drainPackedMotionPlans(): Uint32Array | null;
-  setWinner(winner: Player | Team, allPlayersStats: AllPlayersStats): void;
+  setWinner(winner: Player | Team, allPlayersStats: AllPlayersStats, allAIStats: AllPlayersStats): void;
   getWinner(): Player | Team | null;
   config(): Config;
   isPaused(): boolean;

@@ -266,6 +266,7 @@ export type DisplayChatMessageUpdate = {
 export interface WinUpdate {
   type: GameUpdateType.Win;
   allPlayersStats: AllPlayersStats;
+  allAIStats: AllPlayersStats;
   winner: Winner;
 }
 
