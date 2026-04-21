@@ -93,6 +93,7 @@ export class GameStatsModal extends LitElement {
   @state() private activeTab: TabId = "overview";
   @state() private _sortKey: OverviewSortKey = "goldTotal";
   @state() private _sortDir: "asc" | "desc" = "desc";
+  @state() private _displayCount: number = 10;
 
   close() {
     this.dispatchEvent(new CustomEvent("stats-close", { bubbles: true }));
@@ -280,12 +281,37 @@ export class GameStatsModal extends LitElement {
       return av < bv ? dir : av > bv ? -dir : 0;
     });
 
+    const total = rows.length;
+    const visible =
+      this._displayCount >= total ? rows : rows.slice(0, this._displayCount);
+    const counts = [10, 25, 50, 0] as const;
+
     const arrow = (k: OverviewSortKey) =>
       this._sortKey !== k ? "" : this._sortDir === "desc" ? " ▼" : " ▲";
     const thCls =
       "px-2 py-2 text-right cursor-pointer select-none hover:text-white transition-colors";
 
     return html`
+      <div class="flex items-center justify-end gap-1.5 mb-2 text-xs">
+        <span class="text-gray-500">${translateText("stats_modal.show")}:</span>
+        ${counts.map((c) => {
+          const label = c === 0 ? translateText("stats_modal.show_all") : String(c);
+          const active =
+            c === 0
+              ? this._displayCount >= total
+              : this._displayCount === c;
+          return html`<button
+            @click=${() => {
+              this._displayCount = c === 0 ? Infinity : c;
+            }}
+            class="${active
+              ? "bg-white/15 text-white"
+              : "bg-white/5 text-gray-400 hover:text-white"} px-2 py-0.5 rounded cursor-pointer border-0 transition-colors text-xs"
+          >
+            ${label}
+          </button>`;
+        })}
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -342,7 +368,7 @@ export class GameStatsModal extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${rows.map(
+            ${visible.map(
               (r) => html`
                 <tr
                   class="${r.isMe
