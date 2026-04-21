@@ -1,4 +1,4 @@
-import { LitElement, html, svg } from "lit";
+﻿import { LitElement, html, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatPercentage, renderNumber, translateText } from "../../Utils";
 import { AllPlayersStats } from "../../../core/Schemas";
@@ -7,9 +7,13 @@ import { GameView, PlayerView } from "../../../core/game/GameView";
 import {
   boatUnits,
   bombUnits,
-  otherUnits,
   BOAT_INDEX_SENT,
   BOAT_INDEX_ARRIVE,
+  BOMB_INDEX_RECV,
+  OTHER_INDEX_BUILT,
+  OTHER_INDEX_DESTROY,
+  OTHER_INDEX_CAPTURE,
+  OTHER_INDEX_LOST,
 } from "../../../core/StatsSchemas";
 
 export interface GameHistory {
@@ -489,6 +493,20 @@ export class GameStatsModal extends LitElement {
       translateText("stats_modal.gold_trains"),
     ];
 
+    const myClientID = this.game.myPlayer()?.clientID() ?? null;
+    const econStructTypes = ["city", "port", "fact"] as const;
+    type EconStruct = (typeof econStructTypes)[number];
+    const econStructColors: Record<EconStruct, string> = {
+      city: "#60a5fa",
+      port: "#a78bfa",
+      fact: "#94a3b8",
+    };
+    const econStructNames: Record<EconStruct, string> = {
+      city: translateText("player_stats_table.unit.city"),
+      port: translateText("player_stats_table.unit.port"),
+      fact: translateText("player_stats_table.unit.fact"),
+    };
+
     const players = this.game
       .playerViews()
       .map((p) => {
@@ -500,58 +518,130 @@ export class GameStatsModal extends LitElement {
           Number(stats?.gold?.[3] ?? 0n),
           Number(stats?.gold?.[4] ?? 0n) + Number(stats?.gold?.[5] ?? 0n),
         ];
+        const total = sources.reduce((s, v) => s + v, 0);
         const tradeSent = Number(stats?.boats?.trade?.[BOAT_INDEX_SENT] ?? 0n);
         const tradeArrived = Number(
           stats?.boats?.trade?.[BOAT_INDEX_ARRIVE] ?? 0n,
         );
-        const factoriesBuilt = Number(stats?.units?.fact?.[0] ?? 0n);
+        const structData: Record<
+          EconStruct,
+          { built: number; captured: number; lost: number; destroyed: number }
+        > = {
+          city: {
+            built: Number(stats?.units?.city?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.city?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.city?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.city?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+          port: {
+            built: Number(stats?.units?.port?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.port?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.port?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.port?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+          fact: {
+            built: Number(stats?.units?.fact?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.fact?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.fact?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.fact?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+        };
+        const structTotal = econStructTypes.reduce(
+          (s, k) => s + structData[k].built + structData[k].captured,
+          0,
+        );
         return {
           name: p.displayName(),
           color: p.territoryColor().toHex(),
           playerType: p.type(),
-          isMe:
-            p.clientID() !== null &&
-            p.clientID() === this.game!.myPlayer()?.clientID(),
+          isMe: p.clientID() !== null && p.clientID() === myClientID,
           sources,
-          total: sources.reduce((s, v) => s + v, 0),
+          total,
           tradeSent,
           tradeArrived,
-          factoriesBuilt,
+          structData,
+          structTotal,
         };
       })
-      .filter(
-        (p) => p.total > 0 || p.tradeSent > 0 || p.factoriesBuilt > 0,
-      )
       .sort((a, b) => b.total - a.total);
 
     const hasGoldHist =
       this.history !== null && this.history.labels.length >= 2;
+    const incomePlayers = players.filter((p) => p.total > 0);
+    const tradePlayers = players
+      .filter((p) => p.tradeSent > 0)
+      .sort((a, b) => b.tradeSent - a.tradeSent);
+    const structPlayers = players
+      .filter((p) => p.structTotal > 0)
+      .sort((a, b) => b.structTotal - a.structTotal);
 
-    if (players.length === 0 && !hasGoldHist) return this.collecting();
+    if (incomePlayers.length === 0 && !hasGoldHist) return this.collecting();
+
+    const countSetter = (c: number) => {
+      this._displayCount = c;
+    };
 
     return html`
       <div class="space-y-5">
-        ${players.length > 0
+        ${hasGoldHist
           ? html`
-              <div class="flex flex-wrap gap-3">
-                ${goldLabels.map(
-                  (l, i) => html`
-                    <div
-                      class="flex items-center gap-1.5 text-xs text-white/60"
-                    >
-                      <span
-                        class="w-3 h-2 rounded-sm inline-block"
-                        style="background:${GOLD_COLORS[i]}"
-                      ></span>
-                      ${l}
-                    </div>
-                  `,
-                )}
-              </div>
-              <div class="space-y-2.5">
-                ${players
-                  .filter((p) => p.total > 0)
-                  .map(
+              ${this.chartWithControls(
+                this.game!
+                  .playerViews()
+                  .filter((p) =>
+                    (this.history!.gold[p.id()] ?? []).some((v) => v > 0),
+                  )
+                  .map((p) => {
+                    const vals = this.history!.gold[p.id()] ?? [];
+                    return {
+                      id: p.id(),
+                      name: p.displayName(),
+                      color: p.territoryColor().toHex(),
+                      values: vals,
+                      sortVal: arrMax(vals),
+                    };
+                  }),
+                this.history!.labels,
+                (v) => renderNumber(v),
+                translateText("stats_modal.gold_over_time"),
+                "gold",
+              )}
+            `
+          : html``}
+        ${incomePlayers.length > 0
+          ? html`
+              <div
+                class="${hasGoldHist ? "pt-5 border-t border-white/10" : ""}"
+              >
+                <div class="flex items-center justify-between mb-2">
+                  <div
+                    class="text-gray-400 text-xs font-semibold uppercase tracking-wider"
+                  >
+                    ${translateText("stats_modal.income_breakdown")}
+                  </div>
+                  ${this._renderCountButtons(
+                    this._displayCount,
+                    countSetter,
+                    incomePlayers.length,
+                  )}
+                </div>
+                <div class="flex flex-wrap gap-3 mb-3">
+                  ${goldLabels.map(
+                    (l, i) => html`
+                      <div
+                        class="flex items-center gap-1.5 text-xs text-white/60"
+                      >
+                        <span
+                          class="w-3 h-2 rounded-sm inline-block"
+                          style="background:${GOLD_COLORS[i]}"
+                        ></span>
+                        ${l}
+                      </div>
+                    `,
+                  )}
+                </div>
+                <div class="space-y-2.5">
+                  ${this._applyLimit(incomePlayers).map(
                     (p) => html`
                       <div class="flex items-center gap-3">
                         <div class="w-28 shrink-0 text-right">
@@ -584,195 +674,340 @@ export class GameStatsModal extends LitElement {
                       </div>
                     `,
                   )}
+                </div>
               </div>
-              ${players.some((p) => p.tradeSent > 0 || p.factoriesBuilt > 0)
-                ? html`
-                    <div class="pt-4 border-t border-white/10">
-                      <div
-                        class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3"
-                      >
-                        ${translateText("stats_modal.trade_and_factories")}
-                      </div>
-                      <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                          <thead>
-                            <tr
-                              class="text-gray-400 text-xs uppercase border-b border-white/10"
-                            >
-                              <th class="px-3 py-1.5 text-left">
-                                ${translateText("stats_modal.col_player")}
-                              </th>
-                              <th class="px-2 py-1.5 text-right text-cyan-400">
-                                ${translateText(
-                                  "stats_modal.trade_ships_sent",
-                                )}
-                              </th>
-                              <th
-                                class="px-2 py-1.5 text-right text-green-400"
-                              >
-                                ${translateText(
-                                  "stats_modal.trade_ships_arrived",
-                                )}
-                              </th>
-                              <th
-                                class="px-2 py-1.5 text-right text-gray-400"
-                              >
-                                ${translateText(
-                                  "stats_modal.factories_built",
-                                )}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            ${players
-                              .filter(
-                                (p) =>
-                                  p.tradeSent > 0 || p.factoriesBuilt > 0,
-                              )
-                              .map(
-                                (p) => html`
-                                  <tr
-                                    class="${p.isMe
-                                      ? "bg-blue-900/20"
-                                      : "hover:bg-white/3"} border-b border-white/5"
-                                  >
-                                    <td class="px-3 py-2">
-                                      <div
-                                        class="flex items-center gap-2"
-                                      >
-                                        <span
-                                          class="w-2.5 h-2.5 rounded-full shrink-0"
-                                          style="background:${p.color}"
-                                        ></span>
-                                        <span
-                                          class="${p.isMe
-                                            ? "text-white font-semibold"
-                                            : "text-white/70"} text-xs"
-                                          >${p.name}${typeBadge(
-                                            p.playerType,
-                                          )}</span
-                                        >
-                                      </div>
-                                    </td>
-                                    <td
-                                      class="px-2 py-2 text-right text-cyan-300/70 text-xs tabular-nums"
-                                    >
-                                      ${p.tradeSent || "—"}
-                                    </td>
-                                    <td
-                                      class="px-2 py-2 text-right text-green-300/70 text-xs tabular-nums"
-                                    >
-                                      ${p.tradeArrived || "—"}
-                                    </td>
-                                    <td
-                                      class="px-2 py-2 text-right text-gray-300/70 text-xs tabular-nums"
-                                    >
-                                      ${p.factoriesBuilt || "—"}
-                                    </td>
-                                  </tr>
-                                `,
-                              )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  `
-                : html``}
             `
           : html``}
-        ${hasGoldHist
+        ${tradePlayers.length > 0
           ? html`
-              <div
-                class="${players.length > 0
-                  ? "pt-5 border-t border-white/10"
-                  : ""}"
-              >
-                ${this.chartWithControls(
-                  this.game!
-                    .playerViews()
-                    .filter((p) =>
-                      (this.history!.gold[p.id()] ?? []).some((v) => v > 0),
-                    )
-                    .map((p) => {
-                      const vals = this.history!.gold[p.id()] ?? [];
-                      return {
-                        id: p.id(),
-                        name: p.displayName(),
-                        color: p.territoryColor().toHex(),
-                        values: vals,
-                        sortVal: arrMax(vals),
-                      };
-                    }),
-                  this.history!.labels,
-                  (v) => renderNumber(v),
-                  translateText("stats_modal.gold_over_time"),
-                  "gold",
-                )}
+              <div class="pt-4 border-t border-white/10">
+                <div class="flex items-center justify-between mb-2">
+                  <div
+                    class="text-gray-400 text-xs font-semibold uppercase tracking-wider"
+                  >
+                    ${translateText("stats_modal.trade_shipping")}
+                  </div>
+                  ${this._renderCountButtons(
+                    this._displayCount,
+                    countSetter,
+                    tradePlayers.length,
+                  )}
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr
+                        class="text-gray-400 text-xs uppercase border-b border-white/10"
+                      >
+                        <th class="px-3 py-1.5 text-left">
+                          ${translateText("stats_modal.col_player")}
+                        </th>
+                        <th class="px-2 py-1.5 text-right text-cyan-400">
+                          ${translateText("stats_modal.trade_ships_sent")}
+                        </th>
+                        <th class="px-2 py-1.5 text-right text-green-400">
+                          ${translateText("stats_modal.trade_ships_arrived")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${this._applyLimit(tradePlayers).map(
+                        (p) => html`
+                          <tr
+                            class="${p.isMe
+                              ? "bg-blue-900/20"
+                              : "hover:bg-white/3"} border-b border-white/5"
+                          >
+                            <td class="px-3 py-2">
+                              <div class="flex items-center gap-2">
+                                <span
+                                  class="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style="background:${p.color}"
+                                ></span>
+                                <span
+                                  class="${p.isMe
+                                    ? "text-white font-semibold"
+                                    : "text-white/70"} text-xs"
+                                  >${p.name}${typeBadge(p.playerType)}</span
+                                >
+                              </div>
+                            </td>
+                            <td
+                              class="px-2 py-2 text-right text-cyan-300/70 text-xs tabular-nums"
+                            >
+                              ${p.tradeSent || "—"}
+                            </td>
+                            <td
+                              class="px-2 py-2 text-right text-green-300/70 text-xs tabular-nums"
+                            >
+                              ${p.tradeArrived || "—"}
+                            </td>
+                          </tr>
+                        `,
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `
+          : html``}
+        ${structPlayers.length > 0
+          ? html`
+              <div class="pt-4 border-t border-white/10">
+                <div class="flex items-center justify-between mb-2">
+                  <div
+                    class="text-gray-400 text-xs font-semibold uppercase tracking-wider"
+                  >
+                    ${translateText("stats_modal.economy_structures")}
+                  </div>
+                  ${this._renderCountButtons(
+                    this._displayCount,
+                    countSetter,
+                    structPlayers.length,
+                  )}
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-white/10">
+                        <th
+                          class="px-3 py-2 text-left text-gray-400 text-xs uppercase"
+                        >
+                          ${translateText("stats_modal.col_player")}
+                        </th>
+                        ${econStructTypes.map(
+                          (k) => html`
+                            <th
+                              class="px-2 py-2 text-center text-xs uppercase font-semibold"
+                              colspan="4"
+                              style="color:${econStructColors[k]}"
+                            >
+                              ${econStructNames[k]}
+                            </th>
+                          `,
+                        )}
+                      </tr>
+                      <tr
+                        class="border-b border-white/5 text-[10px] text-gray-500"
+                      >
+                        <th class="px-3 py-1"></th>
+                        ${econStructTypes.map(
+                          () => html`
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Built"
+                            >&#x1F528;</th>
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Captured"
+                            >&#x1F3AF;</th>
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Lost/Stolen"
+                            >&#x2B07;</th>
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Destroyed"
+                            >&#x1F4A5;</th>
+                          `,
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${this._applyLimit(structPlayers).map(
+                        (p) => html`
+                          <tr
+                            class="${p.isMe
+                              ? "bg-blue-900/20"
+                              : "hover:bg-white/3"} border-b border-white/5 transition-colors"
+                          >
+                            <td class="px-3 py-2.5">
+                              <div class="flex items-center gap-2">
+                                <span
+                                  class="w-3 h-3 rounded-full shrink-0"
+                                  style="background:${p.color}"
+                                ></span>
+                                <span
+                                  class="${p.isMe
+                                    ? "text-white font-semibold"
+                                    : "text-white/70"} text-xs"
+                                  >${p.name}${typeBadge(p.playerType)}</span
+                                >
+                              </div>
+                            </td>
+                            ${econStructTypes.map(
+                              (k) => html`
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-blue-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].built || "—"}
+                                </td>
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-green-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].captured || "—"}
+                                </td>
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-orange-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].lost || "—"}
+                                </td>
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-red-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].destroyed || "—"}
+                                </td>
+                              `,
+                            )}
+                          </tr>
+                        `,
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             `
           : html``}
       </div>
     `;
   }
-
   // ── Military ──────────────────────────────────────────────────────────────
 
   private renderMilitary() {
     if (!this.game) return this.noData();
 
-    const unitNames: Record<string, string> = Object.fromEntries(
-      otherUnits.map((k) => [
-        k,
-        translateText(`player_stats_table.unit.${k}`),
-      ]),
-    );
+    const myClientID = this.game.myPlayer()?.clientID() ?? null;
+    const milStructTypes = ["defp", "wshp", "silo", "saml"] as const;
+    type MilStruct = (typeof milStructTypes)[number];
+    const milStructColors: Record<MilStruct, string> = {
+      defp: "#34d399",
+      wshp: "#f87171",
+      silo: "#fbbf24",
+      saml: "#fb923c",
+    };
+    const milStructNames: Record<MilStruct, string> = {
+      defp: translateText("player_stats_table.unit.defp"),
+      wshp: translateText("player_stats_table.unit.wshp"),
+      silo: translateText("player_stats_table.unit.silo"),
+      saml: translateText("player_stats_table.unit.saml"),
+    };
 
     const players = this.game
       .playerViews()
       .map((p) => {
         const stats = this.statsFor(p);
         const troopsSent = Number(stats?.attacks?.[0] ?? 0n);
-        const unitBreakdown: Record<string, number> = {};
-        for (const key of otherUnits)
-          unitBreakdown[key] = Number(stats?.units?.[key]?.[0] ?? 0n);
+        const structData: Record<
+          MilStruct,
+          { built: number; captured: number; lost: number; destroyed: number }
+        > = {
+          defp: {
+            built: Number(stats?.units?.defp?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.defp?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.defp?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.defp?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+          wshp: {
+            built: Number(stats?.units?.wshp?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.wshp?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.wshp?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.wshp?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+          silo: {
+            built: Number(stats?.units?.silo?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.silo?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.silo?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.silo?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+          saml: {
+            built: Number(stats?.units?.saml?.[OTHER_INDEX_BUILT] ?? 0n),
+            captured: Number(stats?.units?.saml?.[OTHER_INDEX_CAPTURE] ?? 0n),
+            lost: Number(stats?.units?.saml?.[OTHER_INDEX_LOST] ?? 0n),
+            destroyed: Number(stats?.units?.saml?.[OTHER_INDEX_DESTROY] ?? 0n),
+          },
+        };
+        const structTotal = milStructTypes.reduce(
+          (s, k) => s + structData[k].built + structData[k].captured,
+          0,
+        );
         return {
           name: p.displayName(),
           color: p.territoryColor().toHex(),
           playerType: p.type(),
-          isMe:
-            p.clientID() !== null &&
-            p.clientID() === this.game!.myPlayer()?.clientID(),
+          isMe: p.clientID() !== null && p.clientID() === myClientID,
           troopsSent,
-          unitBreakdown,
-          totalUnits: Object.values(unitBreakdown).reduce((s, v) => s + v, 0),
+          structData,
+          structTotal,
         };
       });
 
-    const withTroops = players
-      .filter((p) => p.troopsSent > 0)
-      .sort((a, b) => b.troopsSent - a.troopsSent);
-    const withUnits = players
-      .filter((p) => p.totalUnits > 0)
-      .sort((a, b) => b.totalUnits - a.totalUnits);
-    const maxTr = withTroops.length > 0 ? withTroops[0].troopsSent : 1;
     const hasTroopsHist =
       this.history !== null && this.history.labels.length >= 2;
+    const troopsPlayers = players
+      .filter((p) => p.troopsSent > 0)
+      .sort((a, b) => b.troopsSent - a.troopsSent);
+    const structPlayers = players
+      .filter((p) => p.structTotal > 0)
+      .sort((a, b) => b.structTotal - a.structTotal);
+    const maxTr = troopsPlayers.length > 0 ? troopsPlayers[0].troopsSent : 1;
 
-    if (withTroops.length === 0 && withUnits.length === 0 && !hasTroopsHist)
+    if (
+      troopsPlayers.length === 0 &&
+      structPlayers.length === 0 &&
+      !hasTroopsHist
+    )
       return this.collecting();
+
+    const countSetter = (c: number) => {
+      this._displayCount = c;
+    };
 
     return html`
       <div class="space-y-6">
-        ${withTroops.length > 0
+        ${hasTroopsHist
           ? html`
-              <div>
-                <div
-                  class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3"
-                >
-                  ${translateText("stats_modal.troops_sent")}
+              ${this.chartWithControls(
+                this.game!
+                  .playerViews()
+                  .filter((p) =>
+                    (this.history!.troops[p.id()] ?? []).some((v) => v > 0),
+                  )
+                  .map((p) => {
+                    const vals = this.history!.troops[p.id()] ?? [];
+                    return {
+                      id: p.id(),
+                      name: p.displayName(),
+                      color: p.territoryColor().toHex(),
+                      values: vals,
+                      sortVal: arrMax(vals),
+                    };
+                  }),
+                this.history!.labels,
+                (v) => renderNumber(v),
+                translateText("stats_modal.troops_over_time"),
+                "troops",
+              )}
+            `
+          : html``}
+        ${troopsPlayers.length > 0
+          ? html`
+              <div
+                class="${hasTroopsHist ? "pt-5 border-t border-white/10" : ""}"
+              >
+                <div class="flex items-center justify-between mb-3">
+                  <div
+                    class="text-gray-400 text-xs font-semibold uppercase tracking-wider"
+                  >
+                    ${translateText("stats_modal.troops_sent")}
+                  </div>
+                  ${this._renderCountButtons(
+                    this._displayCount,
+                    countSetter,
+                    troopsPlayers.length,
+                  )}
                 </div>
                 <div class="space-y-2">
-                  ${withTroops.map(
+                  ${this._applyLimit(troopsPlayers).map(
                     (p) => html`
                       <div class="flex items-center gap-3">
                         <div class="w-28 shrink-0 text-right">
@@ -803,95 +1038,120 @@ export class GameStatsModal extends LitElement {
               </div>
             `
           : html``}
-        ${withUnits.length > 0
+        ${structPlayers.length > 0
           ? html`
-              <div>
-                <div
-                  class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2"
-                >
-                  ${translateText("stats_modal.structures_built")}
+              <div class="pt-4 border-t border-white/10">
+                <div class="flex items-center justify-between mb-2">
+                  <div
+                    class="text-gray-400 text-xs font-semibold uppercase tracking-wider"
+                  >
+                    ${translateText("stats_modal.military_structures")}
+                  </div>
+                  ${this._renderCountButtons(
+                    this._displayCount,
+                    countSetter,
+                    structPlayers.length,
+                  )}
                 </div>
-                <div class="flex flex-wrap gap-3 mb-3">
-                  ${otherUnits.map(
-                    (key) => html`
-                      <div
-                        class="flex items-center gap-1.5 text-xs text-white/60"
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-white/10">
+                        <th
+                          class="px-3 py-2 text-left text-gray-400 text-xs uppercase"
+                        >
+                          ${translateText("stats_modal.col_player")}
+                        </th>
+                        ${milStructTypes.map(
+                          (k) => html`
+                            <th
+                              class="px-2 py-2 text-center text-xs uppercase font-semibold"
+                              colspan="4"
+                              style="color:${milStructColors[k]}"
+                            >
+                              ${milStructNames[k]}
+                            </th>
+                          `,
+                        )}
+                      </tr>
+                      <tr
+                        class="border-b border-white/5 text-[10px] text-gray-500"
                       >
-                        <span
-                          class="w-3 h-2 rounded-sm inline-block"
-                          style="background:${UNIT_COLORS[key]}"
-                        ></span>
-                        ${unitNames[key]}
-                      </div>
-                    `,
-                  )}
-                </div>
-                <div class="space-y-2">
-                  ${withUnits.map(
-                    (p) => html`
-                      <div class="flex items-center gap-3">
-                        <div class="w-28 shrink-0 text-right">
-                          <span
+                        <th class="px-3 py-1"></th>
+                        ${milStructTypes.map(
+                          () => html`
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Built"
+                            >🔨</th>
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Captured"
+                            >🎯</th>
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Lost/Stolen"
+                            >⬇</th>
+                            <th
+                              class="px-1 py-1 text-center"
+                              title="Destroyed"
+                            >💥</th>
+                          `,
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${this._applyLimit(structPlayers).map(
+                        (p) => html`
+                          <tr
                             class="${p.isMe
-                              ? "text-white font-semibold"
-                              : "text-white/70"} text-xs"
-                            >${p.name}${typeBadge(p.playerType)}</span
+                              ? "bg-blue-900/20"
+                              : "hover:bg-white/3"} border-b border-white/5 transition-colors"
                           >
-                        </div>
-                        <div
-                          class="flex-1 flex h-4 rounded-sm overflow-hidden bg-white/5"
-                          style="gap:1px"
-                        >
-                          ${otherUnits.map((key) =>
-                            p.unitBreakdown[key] > 0
-                              ? html`<div
-                                  style="flex:${p.unitBreakdown[key]};background:${UNIT_COLORS[key]}"
-                                  title="${unitNames[key]}: ${p.unitBreakdown[key]}"
-                                  class="min-w-px"
-                                ></div>`
-                              : html``,
-                          )}
-                        </div>
-                        <div
-                          class="w-14 text-right text-emerald-300/70 text-xs tabular-nums shrink-0"
-                        >
-                          ${renderNumber(p.totalUnits)}
-                        </div>
-                      </div>
-                    `,
-                  )}
+                            <td class="px-3 py-2.5">
+                              <div class="flex items-center gap-2">
+                                <span
+                                  class="w-3 h-3 rounded-full shrink-0"
+                                  style="background:${p.color}"
+                                ></span>
+                                <span
+                                  class="${p.isMe
+                                    ? "text-white font-semibold"
+                                    : "text-white/70"} text-xs"
+                                  >${p.name}${typeBadge(p.playerType)}</span
+                                >
+                              </div>
+                            </td>
+                            ${milStructTypes.map(
+                              (k) => html`
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-blue-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].built || "—"}
+                                </td>
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-green-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].captured || "—"}
+                                </td>
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-orange-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].lost || "—"}
+                                </td>
+                                <td
+                                  class="px-1 py-2.5 text-center text-[11px] text-red-300/70 tabular-nums"
+                                >
+                                  ${p.structData[k].destroyed || "—"}
+                                </td>
+                              `,
+                            )}
+                          </tr>
+                        `,
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            `
-          : html``}
-        ${hasTroopsHist
-          ? html`
-              <div
-                class="${withTroops.length > 0 || withUnits.length > 0
-                  ? "pt-5 border-t border-white/10"
-                  : ""}"
-              >
-                ${this.chartWithControls(
-                  this.game!
-                    .playerViews()
-                    .filter((p) =>
-                      (this.history!.troops[p.id()] ?? []).some((v) => v > 0),
-                    )
-                    .map((p) => {
-                      const vals = this.history!.troops[p.id()] ?? [];
-                      return {
-                        id: p.id(),
-                        name: p.displayName(),
-                        color: p.territoryColor().toHex(),
-                        values: vals,
-                        sortVal: arrMax(vals),
-                      };
-                    }),
-                  this.history!.labels,
-                  (v) => renderNumber(v),
-                  translateText("stats_modal.troops_over_time"),
-                  "troops",
-                )}
               </div>
             `
           : html``}
@@ -911,6 +1171,7 @@ export class GameStatsModal extends LitElement {
       mirvw: "#dc2626",
     };
 
+    const myClientID = this.game.myPlayer()?.clientID() ?? null;
     const players = this.game
       .playerViews()
       .map((p) => {
@@ -920,19 +1181,19 @@ export class GameStatsModal extends LitElement {
           launched: Number(stats?.bombs?.[nuke]?.[0] ?? 0n),
           landed: Number(stats?.bombs?.[nuke]?.[1] ?? 0n),
           intercepted: Number(stats?.bombs?.[nuke]?.[2] ?? 0n),
+          received: Number(stats?.bombs?.[nuke]?.[BOMB_INDEX_RECV] ?? 0n),
         }));
         return {
           name: p.displayName(),
           color: p.territoryColor().toHex(),
           playerType: p.type(),
-          isMe:
-            p.clientID() !== null &&
-            p.clientID() === this.game!.myPlayer()?.clientID(),
+          isMe: p.clientID() !== null && p.clientID() === myClientID,
           nukeData,
           totalLaunched: nukeData.reduce((s, n) => s + n.launched, 0),
+          totalReceived: nukeData.reduce((s, n) => s + n.received, 0),
         };
       })
-      .filter((p) => p.totalLaunched > 0)
+      .filter((p) => p.totalLaunched > 0 || p.totalReceived > 0)
       .sort((a, b) => b.totalLaunched - a.totalLaunched);
 
     if (players.length === 0)
@@ -944,87 +1205,121 @@ export class GameStatsModal extends LitElement {
       </div>`;
 
     return html`
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-white/10">
-              <th class="px-3 py-2 text-left text-gray-400 text-xs uppercase">
-                ${translateText("stats_modal.col_player")}
-              </th>
-              ${bombUnits.map(
-                (nuke) => html`
-                  <th
-                    class="px-2 py-2 text-center text-xs uppercase font-semibold"
-                    colspan="3"
-                    style="color:${nukeColors[nuke]}"
-                  >
-                    ${translateText(`player_stats_table.unit.${nuke}`)}
-                  </th>
-                `,
-              )}
-            </tr>
-            <tr class="border-b border-white/5 text-[10px] text-gray-500">
-              <th class="px-3 py-1"></th>
-              ${bombUnits.map(
-                () => html`
-                  <th class="px-1 py-1 text-center" title="Launched">⬆</th>
-                  <th class="px-1 py-1 text-center" title="Landed">💥</th>
-                  <th class="px-1 py-1 text-center" title="Intercepted">🛡</th>
-                `,
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            ${players.map(
-              (p) => html`
-                <tr
-                  class="${p.isMe
-                    ? "bg-blue-900/20"
-                    : "hover:bg-white/3"} border-b border-white/5 transition-colors"
+      <div>
+        <div class="flex items-center justify-end mb-3">
+          ${this._renderCountButtons(
+            this._displayCount,
+            (c) => {
+              this._displayCount = c;
+            },
+            players.length,
+          )}
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-white/10">
+                <th
+                  class="px-3 py-2 text-left text-gray-400 text-xs uppercase"
                 >
-                  <td class="px-3 py-2.5">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="w-3 h-3 rounded-full shrink-0"
-                        style="background:${p.color}"
-                      ></span>
-                      <span
-                        class="${p.isMe
-                          ? "text-white font-semibold"
-                          : "text-white/70"} text-xs"
-                        >${p.name}${typeBadge(p.playerType)}</span
-                      >
-                    </div>
-                  </td>
-                  ${p.nukeData.map(
-                    (n) => html`
-                      <td
-                        class="px-1 py-2.5 text-center text-[11px] text-yellow-300/70 tabular-nums"
-                      >
-                        ${n.launched || "—"}
-                      </td>
-                      <td
-                        class="px-1 py-2.5 text-center text-[11px] text-green-300/70 tabular-nums"
-                      >
-                        ${n.landed || "—"}
-                      </td>
-                      <td
-                        class="px-1 py-2.5 text-center text-[11px] text-red-300/70 tabular-nums"
-                      >
-                        ${n.intercepted || "—"}
-                      </td>
-                    `,
-                  )}
-                </tr>
-              `,
-            )}
-          </tbody>
-        </table>
+                  ${translateText("stats_modal.col_player")}
+                </th>
+                ${bombUnits.map(
+                  (nuke) => html`
+                    <th
+                      class="px-2 py-2 text-center text-xs uppercase font-semibold"
+                      colspan="4"
+                      style="color:${nukeColors[nuke]}"
+                    >
+                      ${translateText(`player_stats_table.unit.${nuke}`)}
+                    </th>
+                  `,
+                )}
+              </tr>
+              <tr class="border-b border-white/5 text-[10px] text-gray-500">
+                <th class="px-3 py-1"></th>
+                ${bombUnits.map(
+                  () => html`
+                    <th class="px-1 py-1 text-center" title="Launched">⬆</th>
+                    <th class="px-1 py-1 text-center" title="Landed">💥</th>
+                    <th
+                      class="px-1 py-1 text-center"
+                      title="Intercepted by you"
+                    >🛡</th>
+                    <th
+                      class="px-1 py-1 text-center"
+                      title="${translateText("stats_modal.nuke_received")}"
+                    >📥</th>
+                  `,
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              ${this._applyLimit(players).map(
+                (p) => html`
+                  <tr
+                    class="${p.isMe
+                      ? "bg-blue-900/20"
+                      : "hover:bg-white/3"} border-b border-white/5 transition-colors"
+                  >
+                    <td class="px-3 py-2.5">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="w-3 h-3 rounded-full shrink-0"
+                          style="background:${p.color}"
+                        ></span>
+                        <span
+                          class="${p.isMe
+                            ? "text-white font-semibold"
+                            : "text-white/70"} text-xs"
+                          >${p.name}${typeBadge(p.playerType)}</span
+                        >
+                      </div>
+                    </td>
+                    ${p.nukeData.map(
+                      (n) => html`
+                        <td
+                          class="px-1 py-2.5 text-center text-[11px] text-yellow-300/70 tabular-nums"
+                        >
+                          ${n.launched || "—"}
+                        </td>
+                        <td
+                          class="px-1 py-2.5 text-center text-[11px] text-green-300/70 tabular-nums"
+                        >
+                          ${n.landed || "—"}
+                        </td>
+                        <td
+                          class="px-1 py-2.5 text-center text-[11px] text-red-300/70 tabular-nums"
+                        >
+                          ${n.intercepted || "—"}
+                        </td>
+                        <td
+                          class="px-1 py-2.5 text-center text-[11px] text-purple-300/70 tabular-nums"
+                        >
+                          ${n.received || "—"}
+                        </td>
+                      `,
+                    )}
+                  </tr>
+                `,
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
   }
-
   // ── Chart with controls (limit + range slider) ────────────────────────────
+
+  private _applyLimit<T extends { isMe: boolean }>(list: T[]): T[] {
+    if (this._displayCount >= list.length) return list;
+    const sliced = list.slice(0, this._displayCount);
+    if (!sliced.some((p) => p.isMe)) {
+      const me = list.find((p) => p.isMe);
+      if (me) sliced[sliced.length - 1] = me;
+    }
+    return sliced;
+  }
 
   private chartWithControls(
     series: ChartSeries[],

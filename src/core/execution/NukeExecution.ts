@@ -387,9 +387,11 @@ export class NukeExecution implements Execution {
     this.nuke.delete(false);
 
     // Record stats
-    this.mg
-      .stats()
-      .bombLand(this.player, this.target(), this.nuke.type() as NukeType);
+    const tgt = this.target();
+    this.mg.stats().bombLand(this.player, tgt, this.nuke.type() as NukeType);
+    if (tgt.isPlayer()) {
+      this.mg.stats().bombReceive(tgt, this.nuke.type() as NukeType);
+    }
   }
 
   private redrawBuildings(range: number) {
