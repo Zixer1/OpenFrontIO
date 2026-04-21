@@ -4,7 +4,13 @@ import { formatPercentage, renderNumber, translateText } from "../../Utils";
 import { AllPlayersStats } from "../../../core/Schemas";
 import { PlayerType } from "../../../core/game/Game";
 import { GameView, PlayerView } from "../../../core/game/GameView";
-import { bombUnits, otherUnits } from "../../../core/StatsSchemas";
+import {
+  boatUnits,
+  bombUnits,
+  otherUnits,
+  BOAT_INDEX_SENT,
+  BOAT_INDEX_ARRIVE,
+} from "../../../core/StatsSchemas";
 
 export interface GameHistory {
   labels: string[];
@@ -49,6 +55,14 @@ type OverviewSortKey =
   | "nukesLaunched"
   | "betrayals";
 
+interface ChartSeries {
+  id: string;
+  name: string;
+  color: string;
+  values: number[];
+  sortVal: number;
+}
+
 function typeBadge(type: PlayerType) {
   if (type === PlayerType.Nation)
     return html`<span
@@ -79,6 +93,8 @@ export interface OverviewRow {
   betrayals: number;
 }
 
+const CHART_COUNTS = [10, 25, 50, 0] as const;
+
 @customElement("game-stats-modal")
 export class GameStatsModal extends LitElement {
   createRenderRoot() {
@@ -94,6 +110,13 @@ export class GameStatsModal extends LitElement {
   @state() private _sortKey: OverviewSortKey = "goldTotal";
   @state() private _sortDir: "asc" | "desc" = "desc";
   @state() private _displayCount: number = 10;
+  @state() private _chartLimit: number = 10;
+
+  // Per-chart range state: key is chart title hash
+  private _rangeStarts: Record<string, number> = {};
+  private _rangeEnds: Record<string, number> = {};
+  // Tooltip state (not reactive - updated via DOM)
+  private _tooltipEl: HTMLElement | null = null;
 
   close() {
     this.dispatchEvent(new CustomEvent("stats-close", { bubbles: true }));
@@ -284,7 +307,6 @@ export class GameStatsModal extends LitElement {
     const total = rows.length;
     const visible =
       this._displayCount >= total ? rows : rows.slice(0, this._displayCount);
-    const counts = [10, 25, 50, 0] as const;
 
     const arrow = (k: OverviewSortKey) =>
       this._sortKey !== k ? "" : this._sortDir === "desc" ? " ▼" : " ▲";
@@ -292,26 +314,13 @@ export class GameStatsModal extends LitElement {
       "px-2 py-2 text-right cursor-pointer select-none hover:text-white transition-colors";
 
     return html`
-      <div class="flex items-center justify-end gap-1.5 mb-2 text-xs">
-        <span class="text-gray-500">${translateText("stats_modal.show")}:</span>
-        ${counts.map((c) => {
-          const label = c === 0 ? translateText("stats_modal.show_all") : String(c);
-          const active =
-            c === 0
-              ? this._displayCount >= total
-              : this._displayCount === c;
-          return html`<button
-            @click=${() => {
-              this._displayCount = c === 0 ? Infinity : c;
-            }}
-            class="${active
-              ? "bg-white/15 text-white"
-              : "bg-white/5 text-gray-400 hover:text-white"} px-2 py-0.5 rounded cursor-pointer border-0 transition-colors text-xs"
-          >
-            ${label}
-          </button>`;
-        })}
-      </div>
+      ${this._renderCountButtons(
+        this._displayCount,
+        (c) => {
+          this._displayCount = c;
+        },
+        total,
+      )}
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -425,23 +434,28 @@ export class GameStatsModal extends LitElement {
       return this.collecting();
 
     const numLand = this.game!.numLandTiles() || 1;
-    const series = this.game!
+    const series: ChartSeries[] = this.game!
       .playerViews()
       .filter((p) => (this.history!.territory[p.id()] ?? []).some((v) => v > 0))
-      .map((p) => ({
-        id: p.id(),
-        name: p.displayName(),
-        color: p.territoryColor().toHex(),
-        values: (this.history!.territory[p.id()] ?? []).map(
+      .map((p) => {
+        const vals = (this.history!.territory[p.id()] ?? []).map(
           (v) => (v / numLand) * 100,
-        ),
-      }));
+        );
+        return {
+          id: p.id(),
+          name: p.displayName(),
+          color: p.territoryColor().toHex(),
+          values: vals,
+          sortVal: arrMax(vals),
+        };
+      });
 
-    return this.lineChart(
+    return this.chartWithControls(
       series,
       this.history.labels,
       (v) => `${v.toFixed(0)}%`,
       translateText("stats_modal.territory_over_time"),
+      "territory",
     );
   }
 
@@ -469,6 +483,11 @@ export class GameStatsModal extends LitElement {
           Number(stats?.gold?.[3] ?? 0n),
           Number(stats?.gold?.[4] ?? 0n) + Number(stats?.gold?.[5] ?? 0n),
         ];
+        const tradeSent = Number(stats?.boats?.trade?.[BOAT_INDEX_SENT] ?? 0n);
+        const tradeArrived = Number(
+          stats?.boats?.trade?.[BOAT_INDEX_ARRIVE] ?? 0n,
+        );
+        const factoriesBuilt = Number(stats?.units?.fact?.[0] ?? 0n);
         return {
           name: p.displayName(),
           color: p.territoryColor().toHex(),
@@ -478,9 +497,14 @@ export class GameStatsModal extends LitElement {
             p.clientID() === this.game!.myPlayer()?.clientID(),
           sources,
           total: sources.reduce((s, v) => s + v, 0),
+          tradeSent,
+          tradeArrived,
+          factoriesBuilt,
         };
       })
-      .filter((p) => p.total > 0)
+      .filter(
+        (p) => p.total > 0 || p.tradeSent > 0 || p.factoriesBuilt > 0,
+      )
       .sort((a, b) => b.total - a.total);
 
     const hasGoldHist =
@@ -508,40 +532,135 @@ export class GameStatsModal extends LitElement {
                 )}
               </div>
               <div class="space-y-2.5">
-                ${players.map(
-                  (p) => html`
-                    <div class="flex items-center gap-3">
-                      <div class="w-28 shrink-0 text-right">
-                        <span
-                          class="${p.isMe
-                            ? "text-white font-semibold"
-                            : "text-white/70"} text-xs truncate"
-                          >${p.name}${typeBadge(p.playerType)}</span
+                ${players
+                  .filter((p) => p.total > 0)
+                  .map(
+                    (p) => html`
+                      <div class="flex items-center gap-3">
+                        <div class="w-28 shrink-0 text-right">
+                          <span
+                            class="${p.isMe
+                              ? "text-white font-semibold"
+                              : "text-white/70"} text-xs truncate"
+                            >${p.name}${typeBadge(p.playerType)}</span
+                          >
+                        </div>
+                        <div
+                          class="flex-1 flex h-5 rounded-sm overflow-hidden bg-white/5"
+                          style="gap:1px"
                         >
+                          ${p.sources.map((v, i) =>
+                            v > 0
+                              ? html`<div
+                                  style="flex:${v};background:${GOLD_COLORS[i]}"
+                                  title="${goldLabels[i]}: ${renderNumber(v)}"
+                                  class="min-w-px"
+                                ></div>`
+                              : html``,
+                          )}
+                        </div>
+                        <div
+                          class="w-14 text-right text-yellow-300/70 text-xs tabular-nums shrink-0"
+                        >
+                          ${renderNumber(p.total)}
+                        </div>
                       </div>
+                    `,
+                  )}
+              </div>
+              ${players.some((p) => p.tradeSent > 0 || p.factoriesBuilt > 0)
+                ? html`
+                    <div class="pt-4 border-t border-white/10">
                       <div
-                        class="flex-1 flex h-5 rounded-sm overflow-hidden bg-white/5"
-                        style="gap:1px"
+                        class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3"
                       >
-                        ${p.sources.map((v, i) =>
-                          v > 0
-                            ? html`<div
-                                style="flex:${v};background:${GOLD_COLORS[i]}"
-                                title="${goldLabels[i]}: ${renderNumber(v)}"
-                                class="min-w-px"
-                              ></div>`
-                            : html``,
-                        )}
+                        ${translateText("stats_modal.trade_and_factories")}
                       </div>
-                      <div
-                        class="w-14 text-right text-yellow-300/70 text-xs tabular-nums shrink-0"
-                      >
-                        ${renderNumber(p.total)}
+                      <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                          <thead>
+                            <tr
+                              class="text-gray-400 text-xs uppercase border-b border-white/10"
+                            >
+                              <th class="px-3 py-1.5 text-left">
+                                ${translateText("stats_modal.col_player")}
+                              </th>
+                              <th class="px-2 py-1.5 text-right text-cyan-400">
+                                ${translateText(
+                                  "stats_modal.trade_ships_sent",
+                                )}
+                              </th>
+                              <th
+                                class="px-2 py-1.5 text-right text-green-400"
+                              >
+                                ${translateText(
+                                  "stats_modal.trade_ships_arrived",
+                                )}
+                              </th>
+                              <th
+                                class="px-2 py-1.5 text-right text-gray-400"
+                              >
+                                ${translateText(
+                                  "stats_modal.factories_built",
+                                )}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${players
+                              .filter(
+                                (p) =>
+                                  p.tradeSent > 0 || p.factoriesBuilt > 0,
+                              )
+                              .map(
+                                (p) => html`
+                                  <tr
+                                    class="${p.isMe
+                                      ? "bg-blue-900/20"
+                                      : "hover:bg-white/3"} border-b border-white/5"
+                                  >
+                                    <td class="px-3 py-2">
+                                      <div
+                                        class="flex items-center gap-2"
+                                      >
+                                        <span
+                                          class="w-2.5 h-2.5 rounded-full shrink-0"
+                                          style="background:${p.color}"
+                                        ></span>
+                                        <span
+                                          class="${p.isMe
+                                            ? "text-white font-semibold"
+                                            : "text-white/70"} text-xs"
+                                          >${p.name}${typeBadge(
+                                            p.playerType,
+                                          )}</span
+                                        >
+                                      </div>
+                                    </td>
+                                    <td
+                                      class="px-2 py-2 text-right text-cyan-300/70 text-xs tabular-nums"
+                                    >
+                                      ${p.tradeSent || "—"}
+                                    </td>
+                                    <td
+                                      class="px-2 py-2 text-right text-green-300/70 text-xs tabular-nums"
+                                    >
+                                      ${p.tradeArrived || "—"}
+                                    </td>
+                                    <td
+                                      class="px-2 py-2 text-right text-gray-300/70 text-xs tabular-nums"
+                                    >
+                                      ${p.factoriesBuilt || "—"}
+                                    </td>
+                                  </tr>
+                                `,
+                              )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
-                  `,
-                )}
-              </div>
+                  `
+                : html``}
             `
           : html``}
         ${hasGoldHist
@@ -551,21 +670,26 @@ export class GameStatsModal extends LitElement {
                   ? "pt-5 border-t border-white/10"
                   : ""}"
               >
-                ${this.lineChart(
+                ${this.chartWithControls(
                   this.game!
                     .playerViews()
                     .filter((p) =>
                       (this.history!.gold[p.id()] ?? []).some((v) => v > 0),
                     )
-                    .map((p) => ({
-                      id: p.id(),
-                      name: p.displayName(),
-                      color: p.territoryColor().toHex(),
-                      values: this.history!.gold[p.id()] ?? [],
-                    })),
+                    .map((p) => {
+                      const vals = this.history!.gold[p.id()] ?? [];
+                      return {
+                        id: p.id(),
+                        name: p.displayName(),
+                        color: p.territoryColor().toHex(),
+                        values: vals,
+                        sortVal: arrMax(vals),
+                      };
+                    }),
                   this.history!.labels,
                   (v) => renderNumber(v),
                   translateText("stats_modal.gold_over_time"),
+                  "gold",
                 )}
               </div>
             `
@@ -613,7 +737,7 @@ export class GameStatsModal extends LitElement {
     const withUnits = players
       .filter((p) => p.totalUnits > 0)
       .sort((a, b) => b.totalUnits - a.totalUnits);
-    const maxTr = Math.max(...withTroops.map((p) => p.troopsSent), 1);
+    const maxTr = withTroops.length > 0 ? withTroops[0].troopsSent : 1;
     const hasTroopsHist =
       this.history !== null && this.history.labels.length >= 2;
 
@@ -730,21 +854,26 @@ export class GameStatsModal extends LitElement {
                   ? "pt-5 border-t border-white/10"
                   : ""}"
               >
-                ${this.lineChart(
+                ${this.chartWithControls(
                   this.game!
                     .playerViews()
                     .filter((p) =>
                       (this.history!.troops[p.id()] ?? []).some((v) => v > 0),
                     )
-                    .map((p) => ({
-                      id: p.id(),
-                      name: p.displayName(),
-                      color: p.territoryColor().toHex(),
-                      values: this.history!.troops[p.id()] ?? [],
-                    })),
+                    .map((p) => {
+                      const vals = this.history!.troops[p.id()] ?? [];
+                      return {
+                        id: p.id(),
+                        name: p.displayName(),
+                        color: p.territoryColor().toHex(),
+                        values: vals,
+                        sortVal: arrMax(vals),
+                      };
+                    }),
                   this.history!.labels,
                   (v) => renderNumber(v),
                   translateText("stats_modal.troops_over_time"),
+                  "troops",
                 )}
               </div>
             `
@@ -878,36 +1007,76 @@ export class GameStatsModal extends LitElement {
     `;
   }
 
-  // ── SVG line chart ────────────────────────────────────────────────────────
+  // ── Chart with controls (limit + range slider) ────────────────────────────
 
-  lineChart(
-    series: { id: string; name: string; color: string; values: number[] }[],
+  private chartWithControls(
+    series: ChartSeries[],
     labels: string[],
     fmtVal: (v: number) => string,
     title: string,
+    chartKey: string,
+  ) {
+    series.sort((a, b) => b.sortVal - a.sortVal);
+    const limited =
+      this._chartLimit >= series.length
+        ? series
+        : series.slice(0, this._chartLimit);
+
+    return html`
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <div
+            class="text-gray-400 text-xs font-semibold uppercase tracking-wider"
+          >
+            ${title}
+          </div>
+          ${this._renderCountButtons(
+            this._chartLimit,
+            (c) => {
+              this._chartLimit = c;
+            },
+            series.length,
+          )}
+        </div>
+        ${this.lineChart(limited, labels, fmtVal, chartKey)}
+      </div>
+    `;
+  }
+
+  // ── SVG line chart with tooltip + range slider ────────────────────────────
+
+  lineChart(
+    series: ChartSeries[],
+    labels: string[],
+    fmtVal: (v: number) => string,
+    chartKey: string,
   ) {
     const active = series.filter((s) => s.values.length > 1);
-    if (active.length === 0)
-      return html`
-        <div
-          class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2"
-        >
-          ${title}
-        </div>
-        ${this.collecting()}
-      `;
+    if (active.length === 0) return this.collecting();
+
+    const totalLen = active[0].values.length;
+    const rangeStart = this._rangeStarts[chartKey] ?? 0;
+    const rangeEnd = this._rangeEnds[chartKey] ?? totalLen - 1;
+    const lo = Math.max(0, Math.min(rangeStart, totalLen - 2));
+    const hi = Math.min(totalLen - 1, Math.max(lo + 1, rangeEnd));
+
+    const sliced = active.map((s) => ({
+      ...s,
+      values: s.values.slice(lo, hi + 1),
+    }));
+    const slicedLabels = labels.slice(lo, hi + 1);
 
     let maxV = 1;
-    for (const s of active) maxV = arrMax(s.values, maxV);
+    for (const s of sliced) maxV = arrMax(s.values, maxV);
     const W = 540,
-      H = 180,
+      H = 200,
       pL = 46,
       pR = 12,
       pT = 12,
       pB = 32;
     const cW = W - pL - pR,
       cH = H - pT - pB;
-    const n = active[0].values.length;
+    const n = sliced[0].values.length;
     const px = (i: number) => pL + (n > 1 ? (i / (n - 1)) * cW : cW / 2);
     const py = (v: number) => pT + cH - (v / maxV) * cH;
 
@@ -920,52 +1089,187 @@ export class GameStatsModal extends LitElement {
       (i) => i === 0 || i === n - 1 || i % xStep === 0,
     );
 
+    const chartId = `chart-${chartKey}`;
+    const tooltipId = `tooltip-${chartKey}`;
+
+    const onMouseMove = (e: MouseEvent) => {
+      const svgEl = (e.currentTarget as SVGSVGElement);
+      const rect = svgEl.getBoundingClientRect();
+      const scaleX = W / rect.width;
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * (H / rect.height);
+
+      if (mouseX < pL || mouseX > W - pR || mouseY < pT || mouseY > pT + cH) {
+        this._hideTooltip(tooltipId);
+        return;
+      }
+
+      const idx = n > 1 ? Math.round(((mouseX - pL) / cW) * (n - 1)) : 0;
+      const clampedIdx = Math.max(0, Math.min(n - 1, idx));
+
+      let closest: { name: string; color: string; val: number; dy: number } | null = null;
+      let minDy = Infinity;
+      for (const s of sliced) {
+        const val = s.values[clampedIdx];
+        const sy = py(val);
+        const dy = Math.abs(mouseY - sy);
+        if (dy < minDy) {
+          minDy = dy;
+          closest = { name: s.name, color: s.color, val, dy };
+        }
+      }
+
+      if (!closest || minDy > 30) {
+        this._hideTooltip(tooltipId);
+        return;
+      }
+
+      const tooltip = this.querySelector(`#${tooltipId}`) as HTMLElement | null;
+      if (!tooltip) return;
+
+      const xPx = px(clampedIdx) / W * rect.width;
+      const yPx = py(closest.val) / H * rect.height;
+
+      tooltip.style.display = "block";
+      tooltip.style.left = `${xPx}px`;
+      tooltip.style.top = `${yPx - 8}px`;
+      tooltip.innerHTML = `
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <span class="w-2 h-2 rounded-full inline-block" style="background:${closest.color}"></span>
+          <span class="font-medium text-white">${closest.name}</span>
+        </div>
+        <div class="text-white/70">${fmtVal(closest.val)}</div>
+        <div class="text-white/50 text-[9px]">${slicedLabels[clampedIdx] ?? ""}</div>
+      `;
+    };
+
+    const onMouseLeave = () => this._hideTooltip(tooltipId);
+
     return html`
-      <div
-        class="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3"
-      >
-        ${title}
-      </div>
-      <svg
-        viewBox="0 0 ${W} ${H}"
-        class="w-full"
-        style="overflow:visible"
-        aria-hidden="true"
-      >
-        ${yTicks.map(
-          (t) => svg`
-          <line x1="${pL}" y1="${t.yp}" x2="${W - pR}" y2="${t.yp}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-          <text x="${pL - 5}" y="${t.yp + 3.5}" font-size="9" fill="rgba(255,255,255,0.4)" text-anchor="end" font-family="ui-monospace,monospace">${t.label}</text>
-        `,
-        )}
-        ${xIdx.map(
-          (i) => svg`
-          <text x="${px(i)}" y="${pT + cH + 18}" font-size="9" fill="rgba(255,255,255,0.4)" text-anchor="middle" font-family="ui-monospace,monospace">${labels[i] ?? ""}</text>
-          <line x1="${px(i)}" y1="${pT}" x2="${px(i)}" y2="${pT + cH}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-        `,
-        )}
-        ${active.map((s) => {
-          const d = s.values
-            .map(
-              (v, i) =>
-                `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(v).toFixed(1)}`,
-            )
-            .join(" ");
-          return svg`<path d="${d}" stroke="${s.color}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>`;
-        })}
-      </svg>
-      <div class="flex flex-wrap gap-4 mt-2">
-        ${active.map(
-          (s) => html`
-            <div class="flex items-center gap-1.5 text-xs text-white/60">
-              <span
-                class="inline-block h-0.5 w-5 rounded"
-                style="background:${s.color}"
-              ></span>
-              ${s.name}
-            </div>
+      <div class="relative" id="${chartId}">
+        <svg
+          viewBox="0 0 ${W} ${H}"
+          class="w-full"
+          style="overflow:visible"
+          aria-hidden="true"
+          @mousemove=${onMouseMove}
+          @mouseleave=${onMouseLeave}
+        >
+          ${yTicks.map(
+            (t) => svg`
+            <line x1="${pL}" y1="${t.yp}" x2="${W - pR}" y2="${t.yp}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <text x="${pL - 5}" y="${t.yp + 3.5}" font-size="9" fill="rgba(255,255,255,0.4)" text-anchor="end" font-family="ui-monospace,monospace">${t.label}</text>
           `,
-        )}
+          )}
+          ${xIdx.map(
+            (i) => svg`
+            <text x="${px(i)}" y="${pT + cH + 18}" font-size="9" fill="rgba(255,255,255,0.4)" text-anchor="middle" font-family="ui-monospace,monospace">${slicedLabels[i] ?? ""}</text>
+            <line x1="${px(i)}" y1="${pT}" x2="${px(i)}" y2="${pT + cH}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+          `,
+          )}
+          ${sliced.map((s) => {
+            const d = s.values
+              .map(
+                (v, i) =>
+                  `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(v).toFixed(1)}`,
+              )
+              .join(" ");
+            return svg`<path d="${d}" stroke="${s.color}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>`;
+          })}
+        </svg>
+        <div
+          id="${tooltipId}"
+          class="absolute pointer-events-none bg-gray-800/95 border border-white/10 rounded px-2.5 py-1.5 text-[11px] leading-tight z-10 -translate-x-1/2 -translate-y-full"
+          style="display:none"
+        ></div>
+        <div class="flex flex-wrap gap-4 mt-2">
+          ${active.map(
+            (s) => html`
+              <div class="flex items-center gap-1.5 text-xs text-white/60">
+                <span
+                  class="inline-block h-0.5 w-5 rounded"
+                  style="background:${s.color}"
+                ></span>
+                ${s.name}
+              </div>
+            `,
+          )}
+        </div>
+        ${totalLen > 2
+          ? html`
+              <div class="flex items-center gap-3 mt-3">
+                <span class="text-gray-500 text-[10px] shrink-0 w-10 text-right tabular-nums"
+                  >${labels[lo] ?? ""}</span
+                >
+                <input
+                  type="range"
+                  min="0"
+                  max="${totalLen - 2}"
+                  .value=${String(lo)}
+                  @input=${(e: Event) => {
+                    const v = Number((e.target as HTMLInputElement).value);
+                    this._rangeStarts[chartKey] = v;
+                    if (v >= (this._rangeEnds[chartKey] ?? totalLen - 1))
+                      this._rangeEnds[chartKey] = Math.min(v + 1, totalLen - 1);
+                    this.requestUpdate();
+                  }}
+                  class="flex-1 accent-blue-400 h-1 cursor-pointer"
+                  style="appearance:auto"
+                />
+                <input
+                  type="range"
+                  min="1"
+                  max="${totalLen - 1}"
+                  .value=${String(hi)}
+                  @input=${(e: Event) => {
+                    const v = Number((e.target as HTMLInputElement).value);
+                    this._rangeEnds[chartKey] = v;
+                    if (v <= (this._rangeStarts[chartKey] ?? 0))
+                      this._rangeStarts[chartKey] = Math.max(v - 1, 0);
+                    this.requestUpdate();
+                  }}
+                  class="flex-1 accent-blue-400 h-1 cursor-pointer"
+                  style="appearance:auto"
+                />
+                <span class="text-gray-500 text-[10px] shrink-0 w-10 tabular-nums"
+                  >${labels[hi] ?? ""}</span
+                >
+              </div>
+            `
+          : html``}
+      </div>
+    `;
+  }
+
+  private _hideTooltip(tooltipId: string) {
+    const el = this.querySelector(`#${tooltipId}`) as HTMLElement | null;
+    if (el) el.style.display = "none";
+  }
+
+  // ── Shared UI components ──────────────────────────────────────────────────
+
+  private _renderCountButtons(
+    current: number,
+    setter: (v: number) => void,
+    total: number,
+  ) {
+    return html`
+      <div class="flex items-center gap-1.5 text-xs">
+        <span class="text-gray-500">${translateText("stats_modal.show")}:</span>
+        ${CHART_COUNTS.map((c) => {
+          const label =
+            c === 0 ? translateText("stats_modal.show_all") : String(c);
+          const isActive =
+            c === 0 ? current >= total : current === c;
+          return html`<button
+            @click=${() => setter(c === 0 ? Infinity : c)}
+            class="${isActive
+              ? "bg-white/15 text-white"
+              : "bg-white/5 text-gray-400 hover:text-white"} px-2 py-0.5 rounded cursor-pointer border-0 transition-colors text-xs"
+          >
+            ${label}
+          </button>`;
+        })}
       </div>
     `;
   }

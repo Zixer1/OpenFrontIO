@@ -813,6 +813,10 @@
     "gold_trains": "Trains",
     "troops_sent": "Troops Sent",
     "structures_built": "Structures Built",
+    "trade_and_factories": "Trade Ships & Factories",
+    "trade_ships_sent": "Trade Sent",
+    "trade_ships_arrived": "Trade Arrived",
+    "factories_built": "Factories",
     "show": "Show",
     "show_all": "All"
   },
