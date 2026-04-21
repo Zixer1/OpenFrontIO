@@ -812,7 +812,9 @@
     "gold_piracy": "Piracy",
     "gold_trains": "Trains",
     "troops_sent": "Troops Sent",
-    "structures_built": "Structures Built"
+    "structures_built": "Structures Built",
+    "show": "Show",
+    "show_all": "All"
   },
   "leaderboard": {
     "hide": "Hide",
