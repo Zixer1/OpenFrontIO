@@ -10,6 +10,7 @@ import { EventBus } from "../../../core/EventBus";
 import { RankedType } from "../../../core/game/Game";
 import { GameUpdateType } from "../../../core/game/GameUpdates";
 import { GameView } from "../../../core/game/GameView";
+import { AllPlayersStats } from "../../../core/Schemas";
 import { getUserMe } from "../../Api";
 import "../../components/CosmeticButton";
 import {
@@ -20,6 +21,8 @@ import {
 import { crazyGamesSDK } from "../../CrazyGamesSDK";
 import { Platform } from "../../Platform";
 import { SendWinnerEvent } from "../../Transport";
+import { GameHistory } from "./GameStatsModal";
+import "./GameStatsModal";
 import { Layer } from "./Layer";
 
 @customElement("win-modal")
@@ -29,8 +32,28 @@ export class WinModal extends LitElement implements Layer {
 
   private hasShownDeathModal = false;
 
+  // Time-series sampling (every SAMPLE_INTERVAL ticks ≈ every 6 s at 100 ms/tick)
+  private static readonly SAMPLE_INTERVAL = 60;
+  private _tickCount = 0;
+  private _samplingDone = false;
+  private _history: GameHistory = {
+    labels: [],
+    territory: {},
+    gold: {},
+    troops: {},
+  };
+
   @state()
   isVisible = false;
+
+  @state()
+  private allPlayersStats: AllPlayersStats | null = null;
+
+  @state()
+  private _winnerID: string | null = null;
+
+  @state()
+  private statsOpen = false;
 
   @state()
   showButtons = false;
@@ -69,6 +92,19 @@ export class WinModal extends LitElement implements Layer {
         </h2>
         ${this.innerHtml()}
         <div
+          class="${this.showButtons &&
+          (this.allPlayersStats || this._history.labels.length >= 2)
+            ? "mb-2.5"
+            : "hidden"}"
+        >
+          <button
+            @click=${this._openStats}
+            class="w-full px-3 py-2.5 text-sm cursor-pointer bg-teal-600/60 text-white border-0 rounded-sm transition-all duration-200 hover:bg-teal-600/80 hover:-translate-y-px active:translate-y-px"
+          >
+            📊 ${translateText("win_modal.stats_btn")}
+          </button>
+        </div>
+        <div
           class="${this.showButtons
             ? "flex justify-between gap-2.5"
             : "hidden"}"
@@ -99,6 +135,17 @@ export class WinModal extends LitElement implements Layer {
           </button>
         </div>
       </div>
+      ${this.statsOpen
+        ? html`
+            <game-stats-modal
+              .game=${this.game}
+              .allPlayersStats=${this.allPlayersStats}
+              .history=${this._history}
+              .winnerID=${this._winnerID}
+              @stats-close=${this._closeStats}
+            ></game-stats-modal>
+          `
+        : html``}
     `;
   }
 
@@ -253,7 +300,29 @@ export class WinModal extends LitElement implements Layer {
 
   init() {}
 
+  private _sampleHistory() {
+    if (this._samplingDone || this.game.inSpawnPhase()) return;
+    const totalSeconds = Math.round((this._tickCount * 100) / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    this._history.labels.push(`${mins}:${secs.toString().padStart(2, "0")}`);
+    for (const player of this.game.playerViews()) {
+      const pid = player.id();
+      if (!this._history.territory[pid]) this._history.territory[pid] = [];
+      if (!this._history.gold[pid]) this._history.gold[pid] = [];
+      if (!this._history.troops[pid]) this._history.troops[pid] = [];
+      this._history.territory[pid].push(player.numTilesOwned());
+      this._history.gold[pid].push(Number(player.gold()));
+      this._history.troops[pid].push(player.troops());
+    }
+  }
+
   tick() {
+    this._tickCount++;
+    if (this._tickCount % WinModal.SAMPLE_INTERVAL === 0) {
+      this._sampleHistory();
+    }
+
     const myPlayer = this.game.myPlayer();
     if (
       !this.hasShownDeathModal &&
@@ -283,6 +352,8 @@ export class WinModal extends LitElement implements Layer {
           });
           this.isWin = false;
         }
+        this._samplingDone = true;
+        this.allPlayersStats = wu.allPlayersStats;
         history.replaceState(null, "", `${window.location.pathname}?replay`);
         this.show();
       } else if (wu.winner[0] === "nation") {
@@ -290,10 +361,13 @@ export class WinModal extends LitElement implements Layer {
           nation: wu.winner[1],
         });
         this.isWin = false;
+        this._samplingDone = true;
+        this.allPlayersStats = wu.allPlayersStats;
         this.show();
       } else {
         const winner = this.game.playerByClientID(wu.winner[1]);
         if (!winner?.isPlayer()) return;
+        this._winnerID = winner.id();
         const winnerClient = winner.clientID();
         if (winnerClient !== null) {
           this.eventBus.emit(
@@ -313,10 +387,20 @@ export class WinModal extends LitElement implements Layer {
           });
           this.isWin = false;
         }
+        this._samplingDone = true;
+        this.allPlayersStats = wu.allPlayersStats;
         history.replaceState(null, "", `${window.location.pathname}?replay`);
         this.show();
       }
     });
+  }
+
+  private _openStats() {
+    this.statsOpen = true;
+  }
+
+  private _closeStats() {
+    this.statsOpen = false;
   }
 
   renderLayer(/* context: CanvasRenderingContext2D */) {}
