@@ -77,6 +77,7 @@ export const BOAT_INDEX_DESTROY = 3; // Boats destroyed
 export const BOMB_INDEX_LAUNCH = 0; // Bombs launched
 export const BOMB_INDEX_LAND = 1; // Bombs landed
 export const BOMB_INDEX_INTERCEPT = 2; // Bombs intercepted
+export const BOMB_INDEX_RECV = 3; // Bombs received (landed on this player)
 
 // Gold
 export const GOLD_INDEX_WORK = 0; // Gold earned by workers

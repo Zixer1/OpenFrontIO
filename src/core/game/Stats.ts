@@ -79,6 +79,9 @@ export interface Stats {
   // Player's SAM intercepts a bomb from attacker
   bombIntercept(player: Player, type: NukeType, count: number | bigint): void;
 
+  // A bomb lands on target player (target receives a hit)
+  bombReceive(target: Player, type: NukeType): void;
+
   // Player earns gold from conquering tiles or trade ships from captured
   goldWar(player: Player, captured: Player, gold: number | bigint): void;
 
