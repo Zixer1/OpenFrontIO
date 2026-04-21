@@ -56,7 +56,7 @@ export class WinCheckExecution implements Execution {
         (p) => p.type() === PlayerType.Human && !p.isDisconnected(),
       );
       if (humans.length === 1) {
-        this.mg.setWinner(humans[0], this.mg.stats().stats());
+        this.mg.setWinner(humans[0], this.mg.stats().stats(), this.mg.stats().aiStats());
         console.log(`${humans[0].name()} has won the game`);
         this.active = false;
         return;
@@ -75,7 +75,7 @@ export class WinCheckExecution implements Execution {
         timeElapsed - this.mg.config().gameConfig().maxTimerValue! * 60 >= 0) ||
       timeElapsed >= WinCheckExecution.HARD_TIME_LIMIT_SECONDS
     ) {
-      this.mg.setWinner(max, this.mg.stats().stats());
+      this.mg.setWinner(max, this.mg.stats().stats(), this.mg.stats().aiStats());
       console.log(`${max.name()} has won the game`);
       this.active = false;
     }
@@ -112,7 +112,7 @@ export class WinCheckExecution implements Execution {
       timeElapsed >= WinCheckExecution.HARD_TIME_LIMIT_SECONDS
     ) {
       if (max[0] === ColoredTeams.Bot) return;
-      this.mg.setWinner(max[0], this.mg.stats().stats());
+      this.mg.setWinner(max[0], this.mg.stats().stats(), this.mg.stats().aiStats());
       console.log(`${max[0]} has won the game`);
       this.active = false;
     }

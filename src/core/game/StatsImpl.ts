@@ -52,6 +52,7 @@ const conquest_by_type: Record<PlayerType, number> = {
 
 export class StatsImpl implements Stats {
   private readonly data: AllPlayersStats = {};
+  private readonly aiData: AllPlayersStats = {};
 
   private _numMirvLaunched: bigint = 0n;
 
@@ -61,7 +62,7 @@ export class StatsImpl implements Stats {
 
   getPlayerStats(player: Player): PlayerStats {
     const clientID = player.clientID();
-    if (clientID === null) return undefined;
+    if (clientID === null) return this.aiData[player.id()];
     return this.data[clientID];
   }
 
@@ -69,9 +70,20 @@ export class StatsImpl implements Stats {
     return this.data;
   }
 
+  aiStats() {
+    return this.aiData;
+  }
+
   private _makePlayerStats(player: Player): PlayerStats {
     const clientID = player.clientID();
-    if (clientID === null) return undefined;
+    if (clientID === null) {
+      // Nation / Tribe — track in the AI map keyed by PlayerID
+      const pid = player.id();
+      if (pid in this.aiData) return this.aiData[pid];
+      const data = {} satisfies PlayerStats;
+      this.aiData[pid] = data;
+      return data;
+    }
     if (clientID in this.data) {
       return this.data[clientID];
     }

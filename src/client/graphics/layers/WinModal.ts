@@ -50,6 +50,9 @@ export class WinModal extends LitElement implements Layer {
   private allPlayersStats: AllPlayersStats | null = null;
 
   @state()
+  private allAIStats: AllPlayersStats | null = null;
+
+  @state()
   private _winnerID: string | null = null;
 
   @state()
@@ -140,6 +143,7 @@ export class WinModal extends LitElement implements Layer {
             <game-stats-modal
               .game=${this.game}
               .allPlayersStats=${this.allPlayersStats}
+              .allAIStats=${this.allAIStats}
               .history=${this._history}
               .winnerID=${this._winnerID}
               @stats-close=${this._closeStats}
@@ -341,7 +345,7 @@ export class WinModal extends LitElement implements Layer {
       if (wu.winner === undefined) {
         // ...
       } else if (wu.winner[0] === "team") {
-        this.eventBus.emit(new SendWinnerEvent(wu.winner, wu.allPlayersStats));
+        this.eventBus.emit(new SendWinnerEvent(wu.winner, wu.allPlayersStats, wu.allAIStats));
         if (wu.winner[1] === this.game.myPlayer()?.team()) {
           this._title = translateText("win_modal.your_team");
           this.isWin = true;
@@ -354,6 +358,7 @@ export class WinModal extends LitElement implements Layer {
         }
         this._samplingDone = true;
         this.allPlayersStats = wu.allPlayersStats;
+        this.allAIStats = wu.allAIStats;
         history.replaceState(null, "", `${window.location.pathname}?replay`);
         this.show();
       } else if (wu.winner[0] === "nation") {
@@ -363,6 +368,7 @@ export class WinModal extends LitElement implements Layer {
         this.isWin = false;
         this._samplingDone = true;
         this.allPlayersStats = wu.allPlayersStats;
+        this.allAIStats = wu.allAIStats;
         this.show();
       } else {
         const winner = this.game.playerByClientID(wu.winner[1]);
@@ -371,7 +377,7 @@ export class WinModal extends LitElement implements Layer {
         const winnerClient = winner.clientID();
         if (winnerClient !== null) {
           this.eventBus.emit(
-            new SendWinnerEvent(["player", winnerClient], wu.allPlayersStats),
+            new SendWinnerEvent(["player", winnerClient], wu.allPlayersStats, wu.allAIStats),
           );
         }
         if (
@@ -389,6 +395,7 @@ export class WinModal extends LitElement implements Layer {
         }
         this._samplingDone = true;
         this.allPlayersStats = wu.allPlayersStats;
+        this.allAIStats = wu.allAIStats;
         history.replaceState(null, "", `${window.location.pathname}?replay`);
         this.show();
       }

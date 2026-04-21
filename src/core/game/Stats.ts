@@ -5,6 +5,7 @@ import { Player, TerraNullius } from "./Game";
 export interface Stats {
   getPlayerStats(player: Player): PlayerStats | null;
   stats(): AllPlayersStats;
+  aiStats(): AllPlayersStats;
 
   numMirvsLaunched(): bigint;
 

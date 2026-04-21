@@ -631,6 +631,7 @@ export const ClientSendWinnerSchema = z.object({
   type: z.literal("winner"),
   winner: WinnerSchema,
   allPlayersStats: AllPlayersStatsSchema,
+  allAIStats: AllPlayersStatsSchema,
 });
 
 export const ClientHashSchema = z.object({
