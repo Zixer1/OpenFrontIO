@@ -305,8 +305,18 @@ export class GameStatsModal extends LitElement {
     });
 
     const total = rows.length;
-    const visible =
-      this._displayCount >= total ? rows : rows.slice(0, this._displayCount);
+    // Always keep the viewer in the visible set
+    const meIdx = rows.findIndex((r) => r.isMe);
+    let visible: OverviewRow[];
+    if (this._displayCount >= total) {
+      visible = rows;
+    } else {
+      const sliced = rows.slice(0, this._displayCount);
+      if (meIdx >= this._displayCount && meIdx !== -1) {
+        sliced[sliced.length - 1] = rows[meIdx];
+      }
+      visible = sliced;
+    }
 
     const arrow = (k: OverviewSortKey) =>
       this._sortKey !== k ? "" : this._sortDir === "desc" ? " ▼" : " ▲";
@@ -314,13 +324,18 @@ export class GameStatsModal extends LitElement {
       "px-2 py-2 text-right cursor-pointer select-none hover:text-white transition-colors";
 
     return html`
-      ${this._renderCountButtons(
-        this._displayCount,
-        (c) => {
-          this._displayCount = c;
-        },
-        total,
-      )}
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-gray-400 text-xs font-semibold uppercase tracking-wider">
+          ${translateText("stats_modal.tab_overview")}
+        </div>
+        ${this._renderCountButtons(
+          this._displayCount,
+          (c) => {
+            this._displayCount = c;
+          },
+          total,
+        )}
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -1016,11 +1031,32 @@ export class GameStatsModal extends LitElement {
     title: string,
     chartKey: string,
   ) {
-    series.sort((a, b) => b.sortVal - a.sortVal);
-    const limited =
-      this._chartLimit >= series.length
-        ? series
-        : series.slice(0, this._chartLimit);
+    const myPid = this.game?.myPlayer()?.id();
+    // Sort by sortVal descending; viewer goes first regardless
+    series.sort((a, b) => {
+      if (a.id === myPid) return -1;
+      if (b.id === myPid) return 1;
+      return b.sortVal - a.sortVal;
+    });
+
+    let limited: ChartSeries[];
+    if (this._chartLimit >= series.length) {
+      limited = series;
+    } else {
+      limited = series.slice(0, this._chartLimit);
+      // Ensure viewer is included even if outside top N
+      if (myPid && !limited.find((s) => s.id === myPid)) {
+        const me = series.find((s) => s.id === myPid);
+        if (me) limited[limited.length - 1] = me;
+      }
+    }
+
+    // Override viewer color to bright red
+    if (myPid) {
+      limited = limited.map((s) =>
+        s.id === myPid ? { ...s, color: "#ef4444" } : s,
+      );
+    }
 
     return html`
       <div>
@@ -1182,19 +1218,6 @@ export class GameStatsModal extends LitElement {
           class="absolute pointer-events-none bg-gray-800/95 border border-white/10 rounded px-2.5 py-1.5 text-[11px] leading-tight z-10 -translate-x-1/2 -translate-y-full"
           style="display:none"
         ></div>
-        <div class="flex flex-wrap gap-4 mt-2">
-          ${active.map(
-            (s) => html`
-              <div class="flex items-center gap-1.5 text-xs text-white/60">
-                <span
-                  class="inline-block h-0.5 w-5 rounded"
-                  style="background:${s.color}"
-                ></span>
-                ${s.name}
-              </div>
-            `,
-          )}
-        </div>
         ${totalLen > 2
           ? html`
               <div class="flex items-center gap-3 mt-3">
@@ -1237,6 +1260,21 @@ export class GameStatsModal extends LitElement {
               </div>
             `
           : html``}
+        <div class="flex flex-wrap gap-4 mt-3">
+          ${active.map(
+            (s) => html`
+              <div class="flex items-center gap-1.5 text-xs"
+                style="color:${s.color === "#ef4444" ? "#ef4444" : "rgba(255,255,255,0.6)"}"
+              >
+                <span
+                  class="inline-block h-0.5 w-5 rounded"
+                  style="background:${s.color}"
+                ></span>
+                ${s.name}
+              </div>
+            `,
+          )}
+        </div>
       </div>
     `;
   }
