@@ -39,7 +39,7 @@ export class HiddenNavalReferee {
         this.placeMine(clientID, action.tile);
         break;
       case "submerge_submarine":
-        this.submergeSub(clientID, action.unitId);
+        this.submergeSub(clientID, action.unitId, action.tile);
         break;
       case "move_submerged_submarine":
         this.moveSubmergedSub(clientID, action.unitId, action.tile);
@@ -146,12 +146,11 @@ export class HiddenNavalReferee {
     });
   }
 
-  private submergeSub(clientID: ClientID, unitId: number): void {
-    // Only the owner can submerge their own sub
+  private submergeSub(clientID: ClientID, unitId: number, tile: number): void {
     this.submergedSubs.set(unitId, {
       unitId,
       ownerClientID: clientID,
-      tile: 0, // will be set by the client's initial position
+      tile,
     });
     this.pendingEvents.push({
       event: "submarine_submerged",

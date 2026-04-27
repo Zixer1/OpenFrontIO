@@ -17,6 +17,7 @@ import {
   decompressGameRecord,
   replacer,
 } from "../core/Util";
+import { HiddenNavalReferee } from "../server/HiddenNavalReferee";
 import { getPersistentID } from "./Auth";
 import { LobbyConfig } from "./ClientGameRunner";
 import {
@@ -55,6 +56,7 @@ export class LocalServer {
   private clientID: ClientID | undefined;
   private winner: ClientSendWinnerMessage | null = null;
   private allPlayersStats: AllPlayersStats = {};
+  private hiddenNavalReferee = new HiddenNavalReferee();
 
   private turnsExecuted = 0;
   private turnStartTime = 0;
@@ -230,6 +232,11 @@ export class LocalServer {
       this.winner = clientMsg;
       this.allPlayersStats = clientMsg.allPlayersStats;
     }
+    if (clientMsg.type === "hidden_naval") {
+      if (!this.paused && !this.lobbyConfig.gameRecord) {
+        this.hiddenNavalReferee.handleAction(this.clientID!, clientMsg.action);
+      }
+    }
   }
 
   // This is so the client can tell us when it finished processing the turn.
@@ -254,6 +261,10 @@ export class LocalServer {
       turnNumber: this.turns.length,
       intents: this.intents,
     };
+    const hiddenEvents = this.hiddenNavalReferee.flushEvents();
+    if (hiddenEvents.length > 0) {
+      pastTurn.hiddenNavalEvents = hiddenEvents;
+    }
     this.turns.push(pastTurn);
     this.intents = [];
     this.clientMessage({

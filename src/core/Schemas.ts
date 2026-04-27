@@ -509,7 +509,11 @@ export const TurnSchema = z.object({
 
 export const HiddenNavalActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("place_mine"), tile: z.number() }),
-  z.object({ action: z.literal("submerge_submarine"), unitId: z.number() }),
+  z.object({
+    action: z.literal("submerge_submarine"),
+    unitId: z.number(),
+    tile: z.number(),
+  }),
   z.object({
     action: z.literal("move_submerged_submarine"),
     unitId: z.number(),
