@@ -130,6 +130,9 @@ export class UnitView {
   setDocked(_docked: boolean): void {
     throw new Error("setDocked is not supported on UnitView");
   }
+  submerged(): boolean {
+    return this.data.submerged ?? false;
+  }
   isInCombat(): boolean {
     return this.data.inCombat;
   }

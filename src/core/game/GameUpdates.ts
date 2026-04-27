@@ -151,6 +151,7 @@ export interface UnitUpdate {
   hasTrainStation: boolean;
   trainType?: TrainType; // Only for trains
   loaded?: boolean; // Only for trains
+  submerged?: boolean; // Only for submarines
 }
 
 export interface AttackUpdate {

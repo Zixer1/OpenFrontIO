@@ -320,6 +320,8 @@ export enum UnitType {
   MIRVWarhead = "MIRV Warhead",
   Train = "Train",
   Factory = "Factory",
+  SeaMine = "Sea Mine",
+  Submarine = "Submarine",
 }
 
 export enum TrainType {
@@ -340,6 +342,8 @@ export const BuildableAttacks = unitTypeGroup([
   UnitType.HydrogenBomb,
   UnitType.MIRV,
   UnitType.Warship,
+  UnitType.SeaMine,
+  UnitType.Submarine,
 ] as const);
 
 export const Structures = unitTypeGroup([
@@ -424,6 +428,12 @@ export interface UnitParamsMap {
 
   [UnitType.MIRVWarhead]: {
     targetTile?: number;
+  };
+
+  [UnitType.SeaMine]: Record<string, never>;
+
+  [UnitType.Submarine]: {
+    patrolTile: TileRef;
   };
 }
 
@@ -653,6 +663,10 @@ export interface Unit {
   // Warships
   setPatrolTile(tile: TileRef): void;
   patrolTile(): TileRef | undefined;
+
+  // Submarines
+  submerged(): boolean;
+  setSubmerged(submerged: boolean): void;
 }
 
 export interface TerraNullius {

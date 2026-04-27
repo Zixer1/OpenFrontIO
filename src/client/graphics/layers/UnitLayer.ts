@@ -452,6 +452,12 @@ export class UnitLayer implements Layer {
       case UnitType.MIRV:
         this.handleNuke(unit);
         break;
+      case UnitType.SeaMine:
+        this.handleSeaMineEvent(unit);
+        break;
+      case UnitType.Submarine:
+        this.handleSubmarineEvent(unit);
+        break;
     }
   }
 
@@ -468,6 +474,36 @@ export class UnitLayer implements Layer {
 
     if (unit.isInCombat()) {
       this.drawSprite(unit, colord("rgb(200,0,0)"));
+      return;
+    }
+
+    this.drawSprite(unit);
+  }
+
+  private handleSeaMineEvent(unit: UnitView) {
+    // Sea mines are hidden from enemies — only render for owner/allies
+    const rel = this.relationship(unit);
+    if (rel === Relationship.Enemy) {
+      return;
+    }
+    const x = this.game.x(unit.tile());
+    const y = this.game.y(unit.tile());
+    this.paintCell(x, y, rel, unit.owner().borderColor(), 255);
+  }
+
+  private handleSubmarineEvent(unit: UnitView) {
+    // Submerged submarines are hidden from enemies
+    const rel = this.relationship(unit);
+    if (unit.submerged() && rel === Relationship.Enemy) {
+      return;
+    }
+
+    // Submerged own/ally subs render semi-transparent
+    if (unit.submerged()) {
+      this.context.save();
+      this.context.globalAlpha = 0.5;
+      this.drawSprite(unit);
+      this.context.restore();
       return;
     }
 

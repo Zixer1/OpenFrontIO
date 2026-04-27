@@ -95,7 +95,8 @@ export type ClientMessage =
   | ClientJoinMessage
   | ClientRejoinMessage
   | ClientLogMessage
-  | ClientHashMessage;
+  | ClientHashMessage
+  | ClientHiddenNavalMessage;
 
 export type ServerMessage =
   | ServerTurnMessage
@@ -493,7 +494,107 @@ export const TurnSchema = z.object({
   intents: StampedIntentSchema.array(),
   // The hash of the game state at the end of the turn.
   hash: z.number().nullable().optional(),
+  // Server-generated events for hidden naval mechanics (mines, subs).
+  // These reveal only what players are allowed to know.
+  hiddenNavalEvents: z
+    .lazy(() => HiddenNavalEventSchema)
+    .array()
+    .optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Hidden naval messages — private client→server actions that must NOT leak
+// secret coordinates through the normal intent broadcast.
+// ---------------------------------------------------------------------------
+
+export const HiddenNavalActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("place_mine"), tile: z.number() }),
+  z.object({ action: z.literal("submerge_submarine"), unitId: z.number() }),
+  z.object({
+    action: z.literal("move_submerged_submarine"),
+    unitId: z.number(),
+    tile: z.number(),
+  }),
+  z.object({ action: z.literal("surface_submarine"), unitId: z.number() }),
+  z.object({
+    action: z.literal("sweep_mines"),
+    unitId: z.number(),
+    radius: z.number(),
+  }),
+  z.object({
+    action: z.literal("activate_sonar"),
+    unitId: z.number(),
+    radius: z.number(),
+  }),
+  z.object({
+    action: z.literal("launch_submarine_missile"),
+    unitId: z.number(),
+    targetTile: z.number(),
+    missileType: z.enum(UnitType),
+  }),
+]);
+export type HiddenNavalAction = z.infer<typeof HiddenNavalActionSchema>;
+
+export const HiddenNavalEventSchema = z.discriminatedUnion("event", [
+  z.object({
+    event: z.literal("mine_detonated"),
+    tile: z.number(),
+    ownerClientID: ID,
+    victimUnitId: z.number(),
+    damage: z.number(),
+  }),
+  z.object({
+    event: z.literal("mine_disarmed"),
+    ownerClientID: ID,
+    count: z.number(),
+  }),
+  z.object({
+    event: z.literal("submarine_revealed"),
+    unitId: z.number(),
+    ownerClientID: ID,
+    tile: z.number(),
+  }),
+  z.object({
+    event: z.literal("submarine_submerged"),
+    unitId: z.number(),
+    ownerClientID: ID,
+  }),
+  z.object({
+    event: z.literal("submarine_surfaced"),
+    unitId: z.number(),
+    ownerClientID: ID,
+    tile: z.number(),
+  }),
+  z.object({
+    event: z.literal("sonar_contact"),
+    detectorClientID: ID,
+    sectorTile: z.number(),
+    contactType: z.enum(["mine", "submarine", "unknown"]),
+  }),
+  z.object({
+    event: z.literal("submarine_missile_launched"),
+    unitId: z.number(),
+    ownerClientID: ID,
+    tile: z.number(),
+    targetTile: z.number(),
+    missileType: z.enum(UnitType),
+  }),
+  z.object({
+    event: z.literal("mine_placed"),
+    ownerClientID: ID,
+    mineId: z.number(),
+    tile: z.number(),
+  }),
+]);
+export type HiddenNavalEvent = z.infer<typeof HiddenNavalEventSchema>;
+
+export const ClientHiddenNavalMessageSchema = z.object({
+  type: z.literal("hidden_naval"),
+  action: HiddenNavalActionSchema,
+});
+export type ClientHiddenNavalMessage = z.infer<
+  typeof ClientHiddenNavalMessageSchema
+>;
 
 export const FlagName = z
   .string()
@@ -683,6 +784,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   ClientRejoinMessageSchema,
   ClientLogMessageSchema,
   ClientHashSchema,
+  ClientHiddenNavalMessageSchema,
 ]);
 
 //

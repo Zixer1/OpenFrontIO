@@ -17,6 +17,7 @@ import {
   PlayerInfo,
   PlayerProfile,
   PlayerType,
+  Unit,
   UnitType,
 } from "./game/Game";
 import { createGame } from "./game/GameImpl";
@@ -26,7 +27,7 @@ import { ErrorUpdate, GameUpdateViewData } from "./game/GameUpdates";
 import { createNationsForGame } from "./game/NationCreation";
 import { loadTerrainMap as loadGameMap } from "./game/TerrainMapLoader";
 import { PseudoRandom } from "./PseudoRandom";
-import { ClientID, GameStartInfo, Turn } from "./Schemas";
+import { ClientID, GameStartInfo, HiddenNavalEvent, Turn } from "./Schemas";
 import { simpleHash } from "./Util";
 
 export async function createGameRunner(
@@ -125,9 +126,9 @@ export class GameRunner {
     }
     this.isExecuting = true;
 
-    this.game.addExecution(
-      ...this.execManager.createExecs(this.turns[this.currTurn]),
-    );
+    const turn = this.turns[this.currTurn];
+    this.game.addExecution(...this.execManager.createExecs(turn));
+    this.processHiddenNavalEvents(turn.hiddenNavalEvents);
     this.currTurn++;
 
     let updates: GameUpdates;
@@ -188,6 +189,35 @@ export class GameRunner {
 
   public pendingTurns(): number {
     return Math.max(0, this.turns.length - this.currTurn);
+  }
+
+  private processHiddenNavalEvents(
+    events: HiddenNavalEvent[] | undefined,
+  ): void {
+    if (!events || events.length === 0) return;
+    for (const evt of events) {
+      switch (evt.event) {
+        case "submarine_submerged": {
+          const unit = this.findUnitById(evt.unitId);
+          if (unit) unit.setSubmerged(true);
+          break;
+        }
+        case "submarine_surfaced":
+        case "submarine_revealed": {
+          const unit = this.findUnitById(evt.unitId);
+          if (unit) unit.setSubmerged(false);
+          break;
+        }
+        // Informational events — no game state change needed.
+        // mine_detonated is handled by SeaMineExecution in lockstep.
+        default:
+          break;
+      }
+    }
+  }
+
+  private findUnitById(unitId: number): Unit | undefined {
+    return this.game.units().find((u) => u.id() === unitId);
   }
 
   public playerBuildables(

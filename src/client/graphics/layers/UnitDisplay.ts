@@ -28,6 +28,8 @@ const hydrogenBombIcon = assetUrl("images/MushroomCloudIconWhite.svg");
 const atomBombIcon = assetUrl("images/NukeIconWhite.svg");
 const portIcon = assetUrl("images/PortIcon.svg");
 const samLauncherIcon = assetUrl("images/SamLauncherIconWhite.svg");
+const seaMineIcon = assetUrl("images/TargetIconWhite.svg");
+const submarineIcon = assetUrl("images/BattleshipIconWhite.svg");
 const defensePostIcon = assetUrl("images/ShieldIconWhite.svg");
 
 @customElement("unit-display")
@@ -39,6 +41,8 @@ export class UnitDisplay extends LitElement implements Layer {
   private keybinds: Record<string, { value: string; key: string }> = {};
   private _cities = 0;
   private _warships = 0;
+  private _seaMines = 0;
+  private _submarines = 0;
   private _factories = 0;
   private _missileSilo = 0;
   private _port = 0;
@@ -82,6 +86,8 @@ export class UnitDisplay extends LitElement implements Layer {
           (player?.units(UnitType.MissileSilo).length ?? 0) > 0
         );
       case UnitType.Warship:
+      case UnitType.SeaMine:
+      case UnitType.Submarine:
         return (
           this.cost(item) <= (player?.gold() ?? 0n) &&
           (player?.units(UnitType.Port).length ?? 0) > 0
@@ -104,6 +110,8 @@ export class UnitDisplay extends LitElement implements Layer {
     this._samLauncher = player.totalUnitLevels(UnitType.SAMLauncher);
     this._factories = player.totalUnitLevels(UnitType.Factory);
     this._warships = player.totalUnitLevels(UnitType.Warship);
+    this._seaMines = player.totalUnitLevels(UnitType.SeaMine);
+    this._submarines = player.totalUnitLevels(UnitType.Submarine);
     this.requestUpdate();
   }
 
@@ -174,6 +182,20 @@ export class UnitDisplay extends LitElement implements Layer {
             UnitType.Warship,
             "warship",
             this.keybinds["buildWarship"]?.key ?? "7",
+          )}
+          ${this.renderUnitItem(
+            seaMineIcon,
+            this._seaMines,
+            UnitType.SeaMine,
+            "sea_mine",
+            "",
+          )}
+          ${this.renderUnitItem(
+            submarineIcon,
+            this._submarines,
+            UnitType.Submarine,
+            "submarine",
+            "",
           )}
           ${this.renderUnitItem(
             atomBombIcon,
@@ -287,6 +309,8 @@ export class UnitDisplay extends LitElement implements Layer {
                 );
                 break;
               case UnitType.Warship:
+              case UnitType.SeaMine:
+              case UnitType.Submarine:
                 this.eventBus?.emit(new ToggleStructureEvent([UnitType.Port]));
                 break;
               default:

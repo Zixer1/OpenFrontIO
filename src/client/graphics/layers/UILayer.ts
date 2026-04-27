@@ -256,7 +256,8 @@ export class UILayer implements Layer {
       return;
     }
     switch (unit.type()) {
-      case UnitType.Warship: {
+      case UnitType.Warship:
+      case UnitType.Submarine: {
         this.drawHealthBar(unit);
         break;
       }

@@ -547,7 +547,9 @@
     "atom_bomb": "Atom Bomb",
     "hydrogen_bomb": "Hydrogen Bomb",
     "mirv": "MIRV",
-    "factory": "Factory"
+    "factory": "Factory",
+    "sea_mine": "Sea Mine",
+    "submarine": "Submarine"
   },
   "user_setting": {
     "title": "Settings",
@@ -770,7 +772,9 @@
       "port": "Sends trade ships to generate gold",
       "defense_post": "Increases defenses of nearby borders",
       "city": "Increases max population",
-      "factory": "Creates railroads and spawns trains"
+      "factory": "Creates railroads and spawns trains",
+      "sea_mine": "Hidden explosive that damages nearby enemy ships",
+      "submarine": "Hidden ship that patrols and attacks enemy vessels"
     },
     "warship_shift_hint": "Hold Shift and drag to select multiple warships at once",
     "not_enough_money": "Not enough money"

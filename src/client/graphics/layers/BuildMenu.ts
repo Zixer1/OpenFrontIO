@@ -36,7 +36,9 @@ const hydrogenBombIcon = assetUrl("images/MushroomCloudIconWhite.svg");
 const atomBombIcon = assetUrl("images/NukeIconWhite.svg");
 const portIcon = assetUrl("images/PortIcon.svg");
 const samlauncherIcon = assetUrl("images/SamLauncherIconWhite.svg");
+const seaMineIcon = assetUrl("images/TargetIconWhite.svg");
 const shieldIcon = assetUrl("images/ShieldIconWhite.svg");
+const submarineIcon = assetUrl("images/BattleshipIconWhite.svg");
 
 export interface BuildItemDisplay {
   unitType: PlayerBuildableUnitType;
@@ -74,6 +76,20 @@ export const buildTable: BuildItemDisplay[][] = [
       icon: warshipIcon,
       description: "build_menu.desc.warship",
       key: "unit_type.warship",
+      countable: true,
+    },
+    {
+      unitType: UnitType.SeaMine,
+      icon: seaMineIcon,
+      description: "build_menu.desc.sea_mine",
+      key: "unit_type.sea_mine",
+      countable: true,
+    },
+    {
+      unitType: UnitType.Submarine,
+      icon: submarineIcon,
+      description: "build_menu.desc.submarine",
+      key: "unit_type.submarine",
       countable: true,
     },
     {

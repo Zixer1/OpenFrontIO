@@ -28,6 +28,7 @@ import { createPartialGameRecord } from "../core/Util";
 import { archive, finalizeGameRecord } from "./Archive";
 import { Client } from "./Client";
 import { ClientMsgRateLimiter } from "./ClientMsgRateLimiter";
+import { HiddenNavalReferee } from "./HiddenNavalReferee";
 export enum GamePhase {
   Lobby = "LOBBY",
   Active = "ACTIVE",
@@ -91,6 +92,8 @@ export class GameServer {
   private lobbyInfoIntervalId: ReturnType<typeof setInterval> | null = null;
 
   private visibleAt?: number;
+
+  private hiddenNavalReferee = new HiddenNavalReferee();
 
   constructor(
     public readonly id: string,
@@ -539,6 +542,15 @@ export class GameServer {
             this.handleWinner(client, clientMsg);
             break;
           }
+          case "hidden_naval": {
+            if (this._hasStarted && !this.isPaused) {
+              this.hiddenNavalReferee.handleAction(
+                client.clientID,
+                clientMsg.action,
+              );
+            }
+            break;
+          }
           default: {
             this.log.warn(`Unknown message type: ${(clientMsg as any).type}`, {
               clientID: client.clientID,
@@ -784,6 +796,13 @@ export class GameServer {
       turnNumber: this.turns.length,
       intents: this.intents,
     };
+
+    // Flush any hidden naval events into the turn
+    const hiddenEvents = this.hiddenNavalReferee.flushEvents();
+    if (hiddenEvents.length > 0) {
+      pastTurn.hiddenNavalEvents = hiddenEvents;
+    }
+
     this.turns.push(pastTurn);
     this.intents = [];
 

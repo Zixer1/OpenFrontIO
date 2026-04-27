@@ -1150,6 +1150,10 @@ export class PlayerImpl implements Player {
         return this.portSpawn(targetTile, validTiles);
       case UnitType.Warship:
         return this.warshipSpawn(targetTile);
+      case UnitType.Submarine:
+        return this.warshipSpawn(targetTile);
+      case UnitType.SeaMine:
+        return this.seaMineSpawn(targetTile);
       case UnitType.Shell:
       case UnitType.SAMMissile:
         return targetTile;
@@ -1255,6 +1259,22 @@ export class PlayerImpl implements Player {
     );
 
     return bestPort?.tile() ?? false;
+  }
+
+  seaMineSpawn(tile: TileRef): TileRef | false {
+    if (!this.mg.isWater(tile)) {
+      return false;
+    }
+    // Require a port on the same water component
+    const tileComponent = this.mg.getWaterComponent(tile);
+    const hasPort = this.units(UnitType.Port).some(
+      (port) =>
+        port.isActive() &&
+        !port.isUnderConstruction() &&
+        tileComponent !== null &&
+        this.mg.hasWaterComponent(port.tile(), tileComponent),
+    );
+    return hasPort ? tile : false;
   }
 
   landBasedUnitSpawn(tile: TileRef): TileRef | false {

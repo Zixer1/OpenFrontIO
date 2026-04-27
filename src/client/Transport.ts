@@ -13,6 +13,7 @@ import { PlayerView } from "../core/game/GameView";
 import {
   AllPlayersStats,
   ClientHashMessage,
+  ClientHiddenNavalMessage,
   ClientIntentMessage,
   ClientJoinMessage,
   ClientMessage,
@@ -20,6 +21,7 @@ import {
   ClientRejoinMessage,
   ClientSendWinnerMessage,
   GameConfig,
+  HiddenNavalAction,
   Intent,
   ServerMessage,
   ServerMessageSchema,
@@ -173,6 +175,10 @@ export class SendUpdateGameConfigIntentEvent implements GameEvent {
   constructor(public readonly config: Partial<GameConfig>) {}
 }
 
+export class SendHiddenNavalActionEvent implements GameEvent {
+  constructor(public readonly action: HiddenNavalAction) {}
+}
+
 export class Transport {
   private socket: WebSocket | null = null;
 
@@ -261,6 +267,10 @@ export class Transport {
 
     this.eventBus.on(SendUpdateGameConfigIntentEvent, (e) =>
       this.onSendUpdateGameConfigIntent(e),
+    );
+
+    this.eventBus.on(SendHiddenNavalActionEvent, (e) =>
+      this.onSendHiddenNavalAction(e),
     );
   }
 
@@ -642,6 +652,14 @@ export class Transport {
       type: "update_game_config",
       config: event.config,
     });
+  }
+
+  private onSendHiddenNavalAction(event: SendHiddenNavalActionEvent) {
+    const msg: ClientHiddenNavalMessage = {
+      type: "hidden_naval",
+      action: event.action,
+    };
+    this.sendMsg(msg);
   }
 
   private sendIntent(intent: Intent) {

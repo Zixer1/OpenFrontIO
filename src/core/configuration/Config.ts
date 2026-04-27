@@ -161,6 +161,11 @@ export interface Config {
   warshipPortSwitchThreshold(): number;
   defensePostShellAttackRate(): number;
   defensePostTargettingRange(): number;
+  seaMineTriggerRange(): number;
+  seaMineDamageRatio(): number;
+  submarineSonarRange(): number;
+  submarineSweepRange(): number;
+  submarinePatrolRange(): number;
   // 0-1
   traitorDefenseDebuff(): number;
   traitorDuration(): number;

@@ -40,6 +40,7 @@ export class UnitImpl implements Unit {
   private _targetable: boolean = true;
   private _loaded: boolean | undefined;
   private _trainType: TrainType | undefined;
+  private _submerged: boolean = false;
   // Nuke only
   private _trajectoryIndex: number = 0;
   private _trajectory: TrajectoryTile[];
@@ -102,6 +103,15 @@ export class UnitImpl implements Unit {
     return this._patrolTile;
   }
 
+  submerged(): boolean {
+    return this._submerged;
+  }
+
+  setSubmerged(submerged: boolean): void {
+    this._submerged = submerged;
+    this.mg.addUpdate(this.toUpdate());
+  }
+
   isUnit(): this is Unit {
     return true;
   }
@@ -146,6 +156,7 @@ export class UnitImpl implements Unit {
       hasTrainStation: this._hasTrainStation,
       trainType: this._trainType,
       loaded: this._loaded,
+      submerged: this._submerged,
     };
   }
 

@@ -473,6 +473,24 @@ export class DefaultConfig implements Config {
           cost: () => 0n,
         };
         break;
+      case UnitType.SeaMine:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(100_000, 25_000 + numUnits * 5_000),
+            UnitType.SeaMine,
+          ),
+          maxHealth: 1,
+        };
+        break;
+      case UnitType.Submarine:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(2_000_000, (numUnits + 1) * 500_000),
+            UnitType.Submarine,
+          ),
+          maxHealth: 500,
+        };
+        break;
       default:
         assertNever(type);
     }
@@ -1003,6 +1021,26 @@ export class DefaultConfig implements Config {
 
   defensePostTargettingRange(): number {
     return 75;
+  }
+
+  seaMineTriggerRange(): number {
+    return 5;
+  }
+
+  seaMineDamageRatio(): number {
+    return 0.4;
+  }
+
+  submarineSonarRange(): number {
+    return 150;
+  }
+
+  submarineSweepRange(): number {
+    return 50;
+  }
+
+  submarinePatrolRange(): number {
+    return 80;
   }
 
   allianceExtensionPromptOffset(): number {
