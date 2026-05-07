@@ -1015,6 +1015,6 @@ export class DefaultConfig implements Config {
   alliancesCutoffTick(): Tick | null {
     if (this._gameConfig.disableAlliances) return 0;
     if (this._gameConfig.gameType === GameType.Singleplayer) return null;
-    return 45 * 60 * 10;
+    return 2 * 60 * 10;
   }
 }
