@@ -820,12 +820,50 @@ export class GameImpl implements Game {
 
   private checkAlliancesCutoff(): void {
     const cutoff = this._config.alliancesCutoffTick();
-    if (cutoff === null || this._ticks !== cutoff) return;
+    if (cutoff === null) return;
+
+    const fiveMinWarningTick = cutoff - 5 * 60 * 10;
+    if (this._ticks === fiveMinWarningTick && fiveMinWarningTick > 0) {
+      for (const player of this._players.values()) {
+        if (player.isAlive()) {
+          this.displayMessage(
+            "events_display.alliances_disabled_warning_5min",
+            MessageType.ALLIANCES_DISABLED,
+            player.id(),
+          );
+        }
+      }
+    }
+
+    const oneMinWarningTick = cutoff - 60 * 10;
+    if (this._ticks === oneMinWarningTick && oneMinWarningTick > 0) {
+      for (const player of this._players.values()) {
+        if (player.isAlive()) {
+          this.displayMessage(
+            "events_display.alliances_disabled_warning",
+            MessageType.ALLIANCES_DISABLED,
+            player.id(),
+          );
+        }
+      }
+    }
+
+    if (this._ticks !== cutoff) return;
+
     for (const alliance of [...this.alliances_]) {
       this.expireAlliance(alliance);
     }
     for (const req of [...this.allianceRequests]) {
       req.reject();
+    }
+    for (const player of this._players.values()) {
+      if (player.isAlive()) {
+        this.displayMessage(
+          "events_display.alliances_disabled",
+          MessageType.ALLIANCES_DISABLED,
+          player.id(),
+        );
+      }
     }
   }
 
