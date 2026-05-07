@@ -458,6 +458,7 @@ export class GameImpl implements Game {
     for (const tile of waterChangedTiles) {
       this.recordTileUpdate(tile);
     }
+    this.checkAlliancesCutoff();
     this._ticks++;
     return this.updates;
   }
@@ -815,6 +816,17 @@ export class GameImpl implements Game {
     this.alliances_ = this.alliances_.filter(
       (a) => a.requestor() !== player && a.recipient() !== player,
     );
+  }
+
+  private checkAlliancesCutoff(): void {
+    const cutoff = this._config.alliancesCutoffTick();
+    if (cutoff === null || this._ticks !== cutoff) return;
+    for (const alliance of [...this.alliances_]) {
+      this.expireAlliance(alliance);
+    }
+    for (const req of [...this.allianceRequests]) {
+      req.reject();
+    }
   }
 
   public isSpawnImmunityActive(): boolean {
