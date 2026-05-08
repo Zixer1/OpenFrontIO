@@ -1037,6 +1037,8 @@ export enum MessageType {
   RECEIVED_GOLD_FROM_TRADE,
   SENT_TROOPS_TO_PLAYER,
   RECEIVED_TROOPS_FROM_PLAYER,
+  TRADE_SHIP_PURCHASED,
+  TRADE_SHIP_ROUND_TRIP,
   CHAT,
   RENEW_ALLIANCE,
 }
@@ -1076,6 +1078,8 @@ export const MESSAGE_TYPE_CATEGORIES: Record<MessageType, MessageCategory> = {
   [MessageType.RECEIVED_GOLD_FROM_TRADE]: MessageCategory.TRADE,
   [MessageType.SENT_TROOPS_TO_PLAYER]: MessageCategory.TRADE,
   [MessageType.RECEIVED_TROOPS_FROM_PLAYER]: MessageCategory.TRADE,
+  [MessageType.TRADE_SHIP_PURCHASED]: MessageCategory.TRADE,
+  [MessageType.TRADE_SHIP_ROUND_TRIP]: MessageCategory.TRADE,
   [MessageType.CHAT]: MessageCategory.CHAT,
 } as const;
 

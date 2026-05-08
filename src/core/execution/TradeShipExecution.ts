@@ -53,10 +53,23 @@ export class TradeShipExecution implements Execution {
         this.active = false;
         return;
       }
+      const shipCost = this.mg
+        .config()
+        .unitInfo(UnitType.TradeShip)
+        .cost(this.mg, this.origOwner);
       this.tradeShip = this.origOwner.buildUnit(UnitType.TradeShip, spawn, {
         targetUnit: this._dstPort,
         lastSetSafeFromPirates: ticks,
       });
+      if (shipCost > 0n) {
+        this.mg.displayMessage(
+          "events_display.trade_ship_purchased",
+          MessageType.TRADE_SHIP_PURCHASED,
+          this.origOwner.id(),
+          shipCost,
+          { gold: renderNumber(shipCost) },
+        );
+      }
       this.mg.stats().boatSendTrade(this.origOwner, this._dstPort.owner());
     }
 
@@ -246,9 +259,13 @@ export class TradeShipExecution implements Execution {
       const bonusGold = gold * 2n;
       this.srcPort.owner().addGold(bonusGold, this.srcPort.tile());
       this._dstPort.owner().addGold(gold, this.srcPort.tile());
+      this.mg
+        .stats()
+        .boatArriveTrade(this._dstPort.owner(), this.srcPort.owner(), gold);
+      // Replace generic trade messages with round trip bonus messages
       this.mg.displayMessage(
-        "events_display.received_gold_from_trade",
-        MessageType.RECEIVED_GOLD_FROM_TRADE,
+        "events_display.trade_ship_round_trip",
+        MessageType.TRADE_SHIP_ROUND_TRIP,
         this.srcPort.owner().id(),
         bonusGold,
         {
@@ -257,8 +274,8 @@ export class TradeShipExecution implements Execution {
         },
       );
       this.mg.displayMessage(
-        "events_display.received_gold_from_trade",
-        MessageType.RECEIVED_GOLD_FROM_TRADE,
+        "events_display.trade_ship_round_trip",
+        MessageType.TRADE_SHIP_ROUND_TRIP,
         this._dstPort.owner().id(),
         gold,
         {
@@ -266,9 +283,6 @@ export class TradeShipExecution implements Execution {
           name: this.srcPort.owner().displayName(),
         },
       );
-      this.mg
-        .stats()
-        .boatArriveTrade(this._dstPort.owner(), this.srcPort.owner(), gold);
       this.active = false;
       this.tradeShip!.delete(false);
     }
