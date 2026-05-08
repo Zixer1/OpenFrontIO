@@ -135,14 +135,33 @@ describe("TradeShipExecution", () => {
     expect(tradeShip.setTargetUnit).toHaveBeenCalledWith(piratePort);
   });
 
-  it("should complete trade and award gold", () => {
+  it("should start return trip after reaching destination", () => {
     tradeShipExecution["pathFinder"] = {
       next: vi.fn(() => ({ status: PathStatus.COMPLETE, node: 32 })),
       findPath: vi.fn((from: number) => [from]),
     } as any;
     tradeShipExecution.tick(1);
+    // After outbound leg, ship is NOT deleted — it starts the return trip
+    expect(tradeShip.delete).not.toHaveBeenCalled();
+    expect(tradeShipExecution.isActive()).toBe(true);
+    expect(tradeShip.setTargetUnit).toHaveBeenCalledWith(srcPort);
+    expect(game.displayMessage).toHaveBeenCalled();
+  });
+
+  it("should complete round trip and delete ship on return", () => {
+    tradeShipExecution["pathFinder"] = {
+      next: vi.fn(() => ({ status: PathStatus.COMPLETE, node: 32 })),
+      findPath: vi.fn((from: number) => [from]),
+    } as any;
+    // First completion: outbound leg
+    tradeShip.tile = vi.fn(() => 100); // at dst port
+    tradeShipExecution.tick(1);
+    expect(tradeShipExecution.isActive()).toBe(true);
+
+    // Second completion: return leg
+    tradeShip.tile = vi.fn(() => 10); // at src port
+    tradeShipExecution.tick(2);
     expect(tradeShip.delete).toHaveBeenCalledWith(false);
     expect(tradeShipExecution.isActive()).toBe(false);
-    expect(game.displayMessage).toHaveBeenCalled();
   });
 });

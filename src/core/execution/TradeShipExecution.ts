@@ -19,6 +19,7 @@ export class TradeShipExecution implements Execution {
   private wasCaptured = false;
   private pathFinder: WaterPathFinder;
   private tilesTraveled = 0;
+  private returning = false;
   private motionPlanId = 1;
   private motionPlanDst: TileRef | null = null;
 
@@ -79,6 +80,13 @@ export class TradeShipExecution implements Execution {
       return;
     }
 
+    // If source port is destroyed during return trip, delete the ship.
+    if (this.returning && !this.srcPort.isActive()) {
+      this.tradeShip.delete(false);
+      this.active = false;
+      return;
+    }
+
     if (
       !this.wasCaptured &&
       (!this._dstPort.isActive() || !tradeShipOwner.canTrade(dstPortOwner))
@@ -122,7 +130,7 @@ export class TradeShipExecution implements Execution {
       return;
     }
 
-    const dst = this._dstPort.tile();
+    const dst = this.returning ? this.srcPort.tile() : this._dstPort.tile();
     const result = this.pathFinder.next(curTile, dst);
 
     switch (result.status) {
@@ -166,29 +174,40 @@ export class TradeShipExecution implements Execution {
   }
 
   private complete() {
-    this.active = false;
-    this.tradeShip!.delete(false);
     const gold = this.mg
       .config()
       .tradeShipGold(this.tilesTraveled, this.tradeShip!.owner());
 
     if (this.wasCaptured) {
-      this.tradeShip!.owner().addGold(gold, this._dstPort.tile());
+      // Captured ships: deliver cargo + ship scrap value, then despawn
+      const shipCost = Number(
+        this.mg
+          .config()
+          .unitInfo(UnitType.TradeShip)
+          .cost(this.mg, this.tradeShip!.owner()),
+      );
+      const piracyGold = gold + BigInt(shipCost);
+      this.tradeShip!.owner().addGold(piracyGold, this._dstPort.tile());
       this.mg.displayMessage(
         "events_display.received_gold_from_captured_ship",
         MessageType.CAPTURED_ENEMY_UNIT,
         this.tradeShip!.owner().id(),
-        gold,
+        piracyGold,
         {
-          gold: renderNumber(gold),
+          gold: renderNumber(piracyGold),
           name: this.origOwner.displayName(),
         },
       );
-      // Record stats
       this.mg
         .stats()
-        .boatCapturedTrade(this.tradeShip!.owner(), this.origOwner, gold);
-    } else {
+        .boatCapturedTrade(this.tradeShip!.owner(), this.origOwner, piracyGold);
+      this.active = false;
+      this.tradeShip!.delete(false);
+      return;
+    }
+
+    if (!this.returning) {
+      // Outbound leg complete: deposit gold at destination
       this.srcPort.owner().addGold(gold);
       this._dstPort.owner().addGold(gold, this._dstPort.tile());
       this.mg.displayMessage(
@@ -211,10 +230,47 @@ export class TradeShipExecution implements Execution {
           name: this._dstPort.owner().displayName(),
         },
       );
-      // Record stats
       this.mg
         .stats()
         .boatArriveTrade(this.srcPort.owner(), this._dstPort.owner(), gold);
+
+      // Start return leg
+      this.returning = true;
+      this.tilesTraveled = 0;
+      this.motionPlanDst = null;
+      // Swap target to source port for the return trip
+      this.tradeShip!.setTargetUnit(this.srcPort);
+      this.tradeShip!.touch();
+    } else {
+      // Return leg complete: deposit gold with 2x round trip bonus
+      const bonusGold = gold * 2n;
+      this.srcPort.owner().addGold(bonusGold, this.srcPort.tile());
+      this._dstPort.owner().addGold(gold, this.srcPort.tile());
+      this.mg.displayMessage(
+        "events_display.received_gold_from_trade",
+        MessageType.RECEIVED_GOLD_FROM_TRADE,
+        this.srcPort.owner().id(),
+        bonusGold,
+        {
+          gold: renderNumber(bonusGold),
+          name: this._dstPort.owner().displayName(),
+        },
+      );
+      this.mg.displayMessage(
+        "events_display.received_gold_from_trade",
+        MessageType.RECEIVED_GOLD_FROM_TRADE,
+        this._dstPort.owner().id(),
+        gold,
+        {
+          gold: renderNumber(gold),
+          name: this.srcPort.owner().displayName(),
+        },
+      );
+      this.mg
+        .stats()
+        .boatArriveTrade(this._dstPort.owner(), this.srcPort.owner(), gold);
+      this.active = false;
+      this.tradeShip!.delete(false);
     }
     return;
   }
@@ -228,6 +284,6 @@ export class TradeShipExecution implements Execution {
   }
 
   dstPort(): TileRef {
-    return this._dstPort.tile();
+    return this.returning ? this.srcPort.tile() : this._dstPort.tile();
   }
 }
