@@ -10,6 +10,7 @@ export class PortExecution implements Execution {
   private random: PseudoRandom;
   private checkOffset: number;
   private tradeShipSpawnRejections = 0;
+  private lastSentTick = new Map<number, number>();
 
   constructor(port: Unit) {
     this.port = port;
@@ -48,13 +49,13 @@ export class PortExecution implements Execution {
       return;
     }
 
-    const ports = this.tradingPorts();
+    const port = this.selectBestPort();
 
-    if (ports.length === 0) {
+    if (port === null) {
       return;
     }
 
-    const port = this.random.randElement(ports);
+    this.lastSentTick.set(port.id(), this.mg.ticks());
     this.mg.addExecution(
       new TradeShipExecution(this.port.owner(), this.port, port),
     );
@@ -94,51 +95,53 @@ export class PortExecution implements Execution {
     }
   }
 
-  // It's a probability list, so if an element appears twice it's because it's
-  // twice more likely to be picked later.
-  tradingPorts(): Unit[] {
+  private selectBestPort(): Unit | null {
     const sourceComponents = new Set<number>();
-    for (const neighbor of this.mg.neighbors(this.port!.tile())) {
+    for (const neighbor of this.mg.neighbors(this.port.tile())) {
       if (!this.mg.isWater(neighbor)) continue;
       const comp = this.mg.getWaterComponent(neighbor);
       if (comp !== null) sourceComponents.add(comp);
     }
-    const ports = this.mg
+
+    const cooldown = this.mg.config().tradeShipPortCooldown();
+    const ticks = this.mg.ticks();
+
+    const candidates = this.mg
       .players()
-      .filter((p) => p !== this.port!.owner() && p.canTrade(this.port!.owner()))
+      .filter((p) => p !== this.port.owner() && p.canTrade(this.port.owner()))
       .flatMap((p) => p.units(UnitType.Port))
       .filter((p) => {
+        const lastSent = this.lastSentTick.get(p.id());
+        if (lastSent !== undefined && ticks - lastSent < cooldown) return false;
         for (const comp of sourceComponents) {
           if (this.mg.hasWaterComponent(p.tile(), comp)) return true;
         }
         return false;
-      })
-      .sort((p1, p2) => {
-        return (
-          this.mg.manhattanDist(this.port!.tile(), p1.tile()) -
-          this.mg.manhattanDist(this.port!.tile(), p2.tile())
-        );
       });
 
-    const weightedPorts: Unit[] = [];
+    if (candidates.length === 0) return null;
 
-    for (const [i, otherPort] of ports.entries()) {
-      const expanded = new Array(otherPort.level()).fill(otherPort);
-      weightedPorts.push(...expanded);
-      const tooClose =
-        this.mg.manhattanDist(this.port!.tile(), otherPort.tile()) <
-        this.mg.config().tradeShipShortRangeDebuff();
-      const closeBonus =
-        i < this.mg.config().proximityBonusPortsNb(ports.length);
-      if (!tooClose && closeBonus) {
-        // If the port is close, but not too close, add it again
-        // to increase the chances of trading with it.
-        weightedPorts.push(...expanded);
-      }
-      if (!tooClose && this.port!.owner().isFriendly(otherPort.owner())) {
-        weightedPorts.push(...expanded);
-      }
+    const scored: { port: Unit; weight: number }[] = [];
+    for (const dst of candidates) {
+      const dist = this.mg.manhattanDist(this.port.tile(), dst.tile());
+      if (dist === 0) continue;
+      const gold = Number(
+        this.mg.config().tradeShipGold(dist, this.port.owner()),
+      );
+      const weight = (gold / dist) * dst.level();
+      scored.push({ port: dst, weight });
     }
-    return weightedPorts;
+
+    if (scored.length === 0) return null;
+
+    let totalWeight = 0;
+    for (const s of scored) totalWeight += s.weight;
+
+    let roll = this.random.nextFloat(0, totalWeight);
+    for (const s of scored) {
+      roll -= s.weight;
+      if (roll <= 0) return s.port;
+    }
+    return scored[scored.length - 1].port;
   }
 }
