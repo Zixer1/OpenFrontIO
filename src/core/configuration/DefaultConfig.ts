@@ -410,7 +410,15 @@ export class DefaultConfig implements Config {
         break;
       case UnitType.TradeShip:
         info = {
-          cost: () => 0n,
+          cost: this.costWrapper(
+            (numUnits: number) => {
+              if (numUnits < 5) return 15_000;
+              if (numUnits < 10) return 25_000;
+              if (numUnits < 15) return 35_000;
+              return 50_000;
+            },
+            UnitType.TradeShip,
+          ),
         };
         break;
       case UnitType.MissileSilo:
