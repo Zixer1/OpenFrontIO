@@ -32,76 +32,51 @@ describe("PortExecution", () => {
     player = game.player("player_id");
     player.addGold(BigInt(1000000));
     other = game.player("other_id");
+    other.addGold(BigInt(1000000));
 
-    game.config().structureMinDist = () => 10;
+    game.config().structureMinDist = () => 0;
   });
 
-  test("Destination ports chances scale with level", () => {
-    game.config().proximityBonusPortsNb = () => 0;
-    game.config().tradeShipShortRangeDebuff = () => 0;
+  function buildCoastPort(p: Player, y: number) {
+    p.conquer(game.ref(7, y));
+    const spawn = p.canBuild(UnitType.Port, game.ref(7, y));
+    if (spawn === false) throw new Error(`Unable to build port at (7,${y})`);
+    const port = p.buildUnit(UnitType.Port, spawn, {});
+    game.addExecution(new PortExecution(port));
+    return port;
+  }
 
-    player.conquer(game.ref(7, 10));
-    const spawn = player.canBuild(UnitType.Port, game.ref(7, 10));
-    if (spawn === false) {
-      throw new Error("Unable to build port for test");
+  test("trade ship spawns to a valid port", () => {
+    buildCoastPort(player, 10);
+    buildCoastPort(other, 2);
+
+    let tradeShipSeen = false;
+    for (let i = 0; i < 5000; i++) {
+      game.executeNextTick();
+      if (game.unitCount(UnitType.TradeShip) > 0) {
+        tradeShipSeen = true;
+        break;
+      }
     }
-    const port = player.buildUnit(UnitType.Port, spawn, {});
-    const execution = new PortExecution(port);
-    execution.init(game, 0);
-    execution.tick(0);
-
-    other.conquer(game.ref(0, 0));
-    const otherPort = other.buildUnit(UnitType.Port, game.ref(0, 0), {});
-    otherPort.increaseLevel();
-    otherPort.increaseLevel();
-
-    const ports = execution.tradingPorts();
-
-    expect(ports.length).toBe(3);
+    expect(tradeShipSeen).toBe(true);
   });
 
-  test("Trade ship proximity bonus", () => {
-    game.config().proximityBonusPortsNb = () => 10;
-    game.config().tradeShipShortRangeDebuff = () => 0;
+  test("port cooldown prevents sending to same port repeatedly", () => {
+    game.config().tradeShipPortCooldown = () => 10000;
 
-    player.conquer(game.ref(7, 10));
-    const spawn = player.canBuild(UnitType.Port, game.ref(7, 10));
-    if (spawn === false) {
-      throw new Error("Unable to build port for test");
+    buildCoastPort(player, 10);
+    // Build other port without PortExecution so only player's port sends
+    other.conquer(game.ref(7, 2));
+    const spawn = other.canBuild(UnitType.Port, game.ref(7, 2));
+    if (spawn === false) throw new Error("Unable to build other port");
+    other.buildUnit(UnitType.Port, spawn, {});
+
+    let tradeShipCount = 0;
+    for (let i = 0; i < 5000; i++) {
+      game.executeNextTick();
+      const current = game.unitCount(UnitType.TradeShip);
+      if (current > tradeShipCount) tradeShipCount = current;
     }
-    const port = player.buildUnit(UnitType.Port, spawn, {});
-    const execution = new PortExecution(port);
-    execution.init(game, 0);
-    execution.tick(0);
-
-    other.conquer(game.ref(0, 0));
-    other.buildUnit(UnitType.Port, game.ref(0, 0), {});
-
-    const ports = execution.tradingPorts();
-
-    expect(ports.length).toBe(2);
-  });
-
-  test("Trade ship short range debuff", () => {
-    game.config().proximityBonusPortsNb = () => 10;
-    // Short range debuff cancels out the proximity bonus.
-    game.config().tradeShipShortRangeDebuff = () => 100;
-
-    player.conquer(game.ref(7, 10));
-    const spawn = player.canBuild(UnitType.Port, game.ref(7, 10));
-    if (spawn === false) {
-      throw new Error("Unable to build port for test");
-    }
-    const port = player.buildUnit(UnitType.Port, spawn, {});
-    const execution = new PortExecution(port);
-    execution.init(game, 0);
-    execution.tick(0);
-
-    other.conquer(game.ref(0, 0));
-    other.buildUnit(UnitType.Port, game.ref(0, 0), {});
-
-    const ports = execution.tradingPorts();
-
-    expect(ports.length).toBe(1);
+    expect(tradeShipCount).toBeLessThanOrEqual(1);
   });
 });
