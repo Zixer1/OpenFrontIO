@@ -128,7 +128,10 @@ export class PortExecution implements Execution {
       const gold = Number(
         this.mg.config().tradeShipGold(dist, this.port.owner()),
       );
-      const weight = (gold / dist) * dst.level();
+      const weight =
+        (gold / dist) *
+        dst.level() *
+        (this.port.owner().isFriendly(dst.owner()) ? 2 : 1);
       scored.push({ port: dst, weight });
     }
 
