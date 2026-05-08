@@ -780,6 +780,10 @@ export class DefaultConfig implements Config {
     return 300;
   }
 
+  tradeShipPortCooldown(): Tick {
+    return 200;
+  }
+
   proximityBonusPortsNb(totalPorts: number) {
     return within(totalPorts / 3, 4, totalPorts);
   }

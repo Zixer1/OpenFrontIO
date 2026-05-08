@@ -129,6 +129,7 @@ export interface Config {
   unitInfo(type: UnitType): UnitInfo;
   tradeShipShortRangeDebuff(): number;
   tradeShipGold(dist: number, player: Player | PlayerView): Gold;
+  tradeShipPortCooldown(): Tick;
   tradeShipSpawnRate(
     tradeShipSpawnRejections: number,
     numTradeShips: number,
