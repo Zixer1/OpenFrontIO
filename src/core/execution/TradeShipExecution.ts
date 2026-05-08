@@ -8,6 +8,7 @@ import {
   UnitType,
 } from "../game/Game";
 import { TileRef } from "../game/GameMap";
+import { GameUpdateType } from "../game/GameUpdates";
 import { WaterPathFinder } from "../pathfinding/PathFinder";
 import { PathStatus } from "../pathfinding/types";
 import { findClosestBy } from "../Util";
@@ -62,6 +63,13 @@ export class TradeShipExecution implements Execution {
         lastSetSafeFromPirates: ticks,
       });
       if (shipCost > 0n) {
+        this.mg.addUpdate({
+          type: GameUpdateType.BonusEvent,
+          player: this.origOwner.id(),
+          tile: this.srcPort.tile(),
+          gold: -Number(shipCost),
+          troops: 0,
+        });
         this.mg.displayMessage(
           "events_display.trade_ship_purchased",
           MessageType.TRADE_SHIP_PURCHASED,
@@ -221,7 +229,7 @@ export class TradeShipExecution implements Execution {
 
     if (!this.returning) {
       // Outbound leg complete: deposit gold at destination
-      this.srcPort.owner().addGold(gold);
+      this.srcPort.owner().addGold(gold, this.srcPort.tile());
       this._dstPort.owner().addGold(gold, this._dstPort.tile());
       this.mg.displayMessage(
         "events_display.received_gold_from_trade",
