@@ -53,7 +53,7 @@ describe("WinCheckExecution", () => {
     mg.numLandTiles = vi.fn(() => 100);
     mg.numTilesWithFallout = vi.fn(() => 0);
     winCheck.checkWinnerFFA();
-    expect(mg.setWinner).toHaveBeenCalledWith(player, expect.anything());
+    expect(mg.setWinner).toHaveBeenCalledWith(player, expect.anything(), expect.anything());
   });
 
   it("should set winner in FFA if timer is 0", () => {
@@ -64,7 +64,7 @@ describe("WinCheckExecution", () => {
     mg.players = vi.fn(() => [player]);
     mg.numLandTiles = vi.fn(() => 100);
     mg.numTilesWithFallout = vi.fn(() => 0);
-    mg.stats = vi.fn(() => ({ stats: () => ({ mocked: true }) }));
+    mg.stats = vi.fn(() => ({ stats: () => ({ mocked: true }), aiStats: () => ({}) }));
     // Advance ticks until timeElapsed (in seconds) >= maxTimerValue * 60
     // timeElapsed = (ticks - numSpawnPhaseTurns) / 10  =>
     // ticks >= numSpawnPhaseTurns + maxTimerValue * 600
@@ -75,7 +75,7 @@ describe("WinCheckExecution", () => {
       mg.executeNextTick();
     }
     winCheck.checkWinnerFFA();
-    expect(mg.setWinner).toHaveBeenCalledWith(player, expect.any(Object));
+    expect(mg.setWinner).toHaveBeenCalledWith(player, expect.any(Object), expect.anything());
   });
 
   it("should not set winner if no players", () => {
@@ -138,7 +138,7 @@ describe("WinCheckExecution - Nation Winners", () => {
     winCheck.checkWinnerFFA();
 
     // Verify Nation declared winner
-    expect(setWinnerSpy).toHaveBeenCalledWith(nation, expect.anything());
+    expect(setWinnerSpy).toHaveBeenCalledWith(nation, expect.anything(), expect.anything());
     expect(winCheck.isActive()).toBe(false);
   });
 
@@ -217,7 +217,7 @@ describe("WinCheckExecution - Nation Winners", () => {
     winCheck.checkWinnerFFA();
 
     // Verify Nation declared winner (has most territory when timer expires)
-    expect(setWinnerSpy).toHaveBeenCalledWith(nation, expect.anything());
+    expect(setWinnerSpy).toHaveBeenCalledWith(nation, expect.anything(), expect.anything());
     expect(winCheck.isActive()).toBe(false);
   });
 
@@ -300,7 +300,7 @@ describe("WinCheckExecution - Nation Winners", () => {
     winCheck.checkWinnerFFA();
 
     // Verify Nation1 (highest territory) declared winner
-    expect(setWinnerSpy).toHaveBeenCalledWith(nation1, expect.anything());
+    expect(setWinnerSpy).toHaveBeenCalledWith(nation1, expect.anything(), expect.anything());
     expect(winCheck.isActive()).toBe(false);
   });
 
@@ -423,7 +423,7 @@ describe("WinCheckExecution - 1v1 Ranked Mode", () => {
     winCheck.checkWinnerFFA();
 
     // Verify the remaining connected human is declared winner
-    expect(setWinnerSpy).toHaveBeenCalledWith(human1, expect.anything());
+    expect(setWinnerSpy).toHaveBeenCalledWith(human1, expect.anything(), expect.anything());
     expect(winCheck.isActive()).toBe(false);
   });
 
@@ -579,7 +579,7 @@ describe("WinCheckExecution - 1v1 Ranked Mode", () => {
     winCheck.checkWinnerFFA();
 
     // Verify human is declared winner (only one human player)
-    expect(setWinnerSpy).toHaveBeenCalledWith(human, expect.anything());
+    expect(setWinnerSpy).toHaveBeenCalledWith(human, expect.anything(), expect.anything());
     expect(winCheck.isActive()).toBe(false);
   });
 });
