@@ -24,11 +24,11 @@ import { playerInfo, setup } from "./util/Setup";
 // real simulation is the final test.
 //
 // The exec reads the real "veryfast" waves. WAVE_TICK sits in the 20% hold
-// window (elapsed 750-780), so the bar is a stable 20% of the map (land 1000 ->
+// window (elapsed 765-773), so the bar is a stable 20% of the map (land 1000 ->
 // bar 200) while the drain/flag logic is exercised.
 // ---------------------------------------------------------------------------
 
-const WAVE_TICK = 7600; // elapsed 760s -> veryfast 20% hold (bar 200 @ land 1000)
+const WAVE_TICK = 7660; // elapsed 766s -> veryfast 20% hold (bar 200 @ land 1000)
 
 type SDConfig = ReturnType<ReturnType<Game["config"]>["doomsdayClockConfig"]>;
 
@@ -477,23 +477,23 @@ describe("doomsdayClockRequiredTiles (ramping waves)", () => {
   const land = 10000;
 
   it("is 0 through the grace, ramps linearly, then holds during the pause", () => {
-    // normal: grace 330s, then a 270s ramp 0->3%, then a 30s hold, ...
-    expect(doomsdayClockRequiredTiles("normal", land, 200)).toBe(0); // in the grace
-    expect(doomsdayClockRequiredTiles("normal", land, 330)).toBe(0); // grace ends
-    expect(doomsdayClockRequiredTiles("normal", land, 465)).toBe(150); // halfway up -> 1.5%
-    expect(doomsdayClockRequiredTiles("normal", land, 600)).toBe(300); // ramp done -> 3%
-    expect(doomsdayClockRequiredTiles("normal", land, 615)).toBe(300); // pause holds 3%
-    expect(doomsdayClockRequiredTiles("normal", land, 630)).toBe(300); // next ramp starts at 3%
+    // normal: grace 400s, then a 300s ramp 0->2.5%, then a 50s hold, ...
+    expect(doomsdayClockRequiredTiles("normal", land, 250)).toBe(0); // in the grace
+    expect(doomsdayClockRequiredTiles("normal", land, 400)).toBe(0); // grace ends
+    expect(doomsdayClockRequiredTiles("normal", land, 550)).toBe(125); // halfway up -> 1.25%
+    expect(doomsdayClockRequiredTiles("normal", land, 700)).toBe(250); // ramp done -> 2.5%
+    expect(doomsdayClockRequiredTiles("normal", land, 720)).toBe(250); // pause holds 2.5%
+    expect(doomsdayClockRequiredTiles("normal", land, 750)).toBe(250); // next ramp starts at 2.5%
     expect(doomsdayClockRequiredTiles("normal", land, 9999)).toBe(5500); // final 55%
   });
 
-  it("passes 30% then reaches the final 55% squeeze per preset", () => {
-    // 30% waypoint, then the 6th wave to 55% one cycle later.
-    expect(doomsdayClockRequiredTiles("normal", land, 1800)).toBe(3000); // 30% @ 30:00
-    expect(doomsdayClockRequiredTiles("normal", land, 2100)).toBe(5500); // 55% @ 35:00
-    expect(doomsdayClockRequiredTiles("fast", land, 1440)).toBe(5500); // 55% @ 24:00
-    expect(doomsdayClockRequiredTiles("veryfast", land, 1050)).toBe(5500); // 55% @ 17:30
-    expect(doomsdayClockRequiredTiles("slow", land, 2520)).toBe(5500); // 55% @ 42:00
+  it("reaches the 32% wave then the final 55% squeeze per preset", () => {
+    // 32% waypoint (5th wave), then the 6th wave to 55%.
+    expect(doomsdayClockRequiredTiles("normal", land, 1605)).toBe(3200); // 32% wave
+    expect(doomsdayClockRequiredTiles("normal", land, 1710)).toBe(5500); // 55% @ ~28:25
+    expect(doomsdayClockRequiredTiles("fast", land, 1270)).toBe(5500); // 55% @ ~21:00
+    expect(doomsdayClockRequiredTiles("veryfast", land, 890)).toBe(5500); // 55% @ ~14:43
+    expect(doomsdayClockRequiredTiles("slow", land, 2060)).toBe(5500); // 55% @ ~34:10
   });
 
   it("never decreases, and is zero for no land", () => {
@@ -511,51 +511,51 @@ describe("doomsdayClockSideRequiredTiles (headcount scaling)", () => {
   const land = 10000;
 
   it("scales the base share by side size and caps at the whole map", () => {
-    // veryfast at 900s is the final 30% wave -> base 3000 tiles.
-    expect(doomsdayClockRequiredTiles("veryfast", land, 900)).toBe(3000);
-    expect(doomsdayClockSideRequiredTiles("veryfast", land, 900, 1)).toBe(3000); // solo
-    expect(doomsdayClockSideRequiredTiles("veryfast", land, 900, 2)).toBe(6000); // 2x
-    expect(doomsdayClockSideRequiredTiles("veryfast", land, 900, 4)).toBe(
+    // veryfast at 768s sits in the 20% hold -> base 2000 tiles.
+    expect(doomsdayClockRequiredTiles("veryfast", land, 768)).toBe(2000);
+    expect(doomsdayClockSideRequiredTiles("veryfast", land, 768, 1)).toBe(2000); // solo
+    expect(doomsdayClockSideRequiredTiles("veryfast", land, 768, 2)).toBe(4000); // 2x
+    expect(doomsdayClockSideRequiredTiles("veryfast", land, 768, 6)).toBe(
       10000,
-    ); // capped
-    expect(doomsdayClockSideRequiredTiles("veryfast", land, 900, 0)).toBe(3000); // min size 1
+    ); // 12000 capped at the map
+    expect(doomsdayClockSideRequiredTiles("veryfast", land, 768, 0)).toBe(2000); // min size 1
   });
 });
 
 describe("doomsdayClockWaveState", () => {
   it("reports the live share and target while ramping", () => {
-    const s = doomsdayClockWaveState("normal", 465); // mid the first ramp (0->3%)
-    expect(s.currentPercent).toBe(1.5);
-    expect(s.targetPercent).toBe(3);
+    const s = doomsdayClockWaveState("normal", 550); // mid the first ramp (0->2.5%)
+    expect(s.currentPercent).toBe(1.25);
+    expect(s.targetPercent).toBe(2.5);
     expect(s.growing).toBe(true);
     expect(s.secondsToNextGrowth).toBe(0);
     expect(s.done).toBe(false);
   });
 
   it("counts down to the next ramp during a pause", () => {
-    const s = doomsdayClockWaveState("normal", 615); // in the first pause (600-630)
+    const s = doomsdayClockWaveState("normal", 720); // in the first pause (700-750)
     expect(s.growing).toBe(false);
-    expect(s.currentPercent).toBe(3); // held at the level just reached
-    expect(s.targetPercent).toBe(5); // next ramp climbs to 5%
-    expect(s.secondsToNextGrowth).toBe(15); // next ramp starts at 630
+    expect(s.currentPercent).toBe(2.5); // held at the level just reached
+    expect(s.targetPercent).toBe(4.5); // next ramp climbs to 4.5%
+    expect(s.secondsToNextGrowth).toBe(30); // next ramp starts at 750
   });
 
   it("counts down through the grace", () => {
     const s = doomsdayClockWaveState("normal", 200);
     expect(s.currentPercent).toBe(0);
-    expect(s.targetPercent).toBe(3);
-    expect(s.secondsToNextGrowth).toBe(130); // first ramp at 330
+    expect(s.targetPercent).toBe(2.5);
+    expect(s.secondsToNextGrowth).toBe(200); // first ramp at 400
   });
 
   it("flags the 10s window (5s each side) around a ramp starting", () => {
-    // veryfast first ramp starts at 180s.
-    expect(doomsdayClockWaveState("veryfast", 176).waveFlash).toBe(true); // 4s before
-    expect(doomsdayClockWaveState("veryfast", 184).waveFlash).toBe(true); // 4s after
+    // veryfast first ramp starts at 210s.
+    expect(doomsdayClockWaveState("veryfast", 206).waveFlash).toBe(true); // 4s before
+    expect(doomsdayClockWaveState("veryfast", 214).waveFlash).toBe(true); // 4s after
     expect(doomsdayClockWaveState("veryfast", 250).waveFlash).toBe(false); // mid-ramp
   });
 
   it("marks done after the last ramp", () => {
-    const s = doomsdayClockWaveState("veryfast", 1100); // past the final ramp (@1050) = 55%
+    const s = doomsdayClockWaveState("veryfast", 1100); // past the final ramp (@883) = 55%
     expect(s.done).toBe(true);
     expect(s.currentPercent).toBe(55);
     expect(s.secondsToNextGrowth).toBe(0);
